@@ -99,9 +99,9 @@ Arbitrage in DeFi occurs when the same token pair trades at different prices on 
 
 #### Milestone 1.1 — Data Pipeline Foundation
 
-- [ ] Project skeleton set up and running locally
-- [ ] Successfully connect to at least one DEX and retrieve a live token price
-- [ ] Price displayed in terminal or basic UI output
+- [x] Project skeleton set up and running locally
+- [x] Successfully connect to at least one DEX and retrieve a live token price
+- [x] Price displayed in terminal or basic UI output
 
 **Exit criteria**: A live ETH price from at least one DEX is fetched and displayed on demand
 
@@ -109,9 +109,9 @@ Arbitrage in DeFi occurs when the same token pair trades at different prices on 
 
 #### Milestone 1.2 — Concurrent Multi-DEX Fetching
 
-- [ ] Connect to at least two additional DEXes
-- [ ] All price feeds fetched concurrently without one blocking another
-- [ ] Prices normalised to a consistent format for comparison
+- [x] Connect to at least two additional DEXes
+- [x] All price feeds fetched concurrently without one blocking another
+- [x] Prices normalised to a consistent format for comparison
 - [ ] Failed or stale connections handled gracefully without crashing
 - [ ] Raw prices logged locally with timestamps
 
@@ -121,9 +121,9 @@ Arbitrage in DeFi occurs when the same token pair trades at different prices on 
 
 #### Milestone 1.3 — Spread Detection & Gas Modelling
 
-- [ ] Price comparison engine identifies spread between any two DEX prices
-- [ ] Current gas price fetched and incorporated into profit calculation
-- [ ] Net profit estimated: spread minus estimated gas cost
+- [x] Price comparison engine identifies spread between any two DEX prices
+- [x] Current gas price fetched and incorporated into profit calculation
+- [x] Net profit estimated: spread minus estimated gas cost
 - [ ] Opportunities above a configurable threshold flagged and logged
 
 **Exit criteria**: Scanner correctly identifies and logs profitable spreads with gas-adjusted profit estimates
@@ -132,8 +132,8 @@ Arbitrage in DeFi occurs when the same token pair trades at different prices on 
 
 #### Milestone 1.4 — Dashboard
 
-- [ ] Live price display per DEX updating in real-time
-- [ ] Pairwise spread overview across monitored DEXes
+- [x] Live price display per DEX updating in real-time
+- [x] Pairwise spread overview across monitored DEXes
 - [ ] Scrolling opportunity feed with spread, estimated profit, and timestamp
 - [ ] Configurable minimum profit threshold
 - [ ] Connection status visible per feed
