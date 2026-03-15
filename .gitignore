@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# CLI
+agents.md
+claude.md
+gemini.md
+
+# Secrets
+.env

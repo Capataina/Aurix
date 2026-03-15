@@ -1,0 +1,54 @@
+:root {
+  font-family: "Sora", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #ebedf2;
+  background: #090b10;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  --page-bg: #090b10;
+  --panel: #10141d;
+  --panel-elevated: #0d1118;
+  --panel-border: rgba(255, 255, 255, 0.07);
+  --copy-primary: #ebedf2;
+  --copy-muted: rgba(235, 237, 242, 0.64);
+  --copy-faint: rgba(235, 237, 242, 0.42);
+  --accent-mint: #97efc9;
+  --accent-sky: #8fd3ff;
+  --accent-lilac: #c3b2ff;
+  --accent-peach: #ffc3a8;
+  --accent-slate: #6d7789;
+  --danger-soft: #ffb2c2;
+  --shadow-soft: 0 20px 55px rgba(0, 0, 0, 0.28);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(143, 211, 255, 0.08), transparent 22%),
+    linear-gradient(180deg, #090b10 0%, #0a0d13 100%);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
