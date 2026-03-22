@@ -9,17 +9,21 @@
 - Tab 1 currently exposes raw venue prices, deviation-from-median, venue spread, and a simple gas-adjusted net estimate in the GUI.
 - The chart currently operates in one mode at a time so each analytical view can be read independently.
 - Event markers currently represent positive values in the simple gas-adjusted estimate.
+- Tab 1 now derives a first rule-based insights layer from in-session history, including live ranking, spread, deviation, gas-aware interpretation, and recent event transitions.
 
 ## Implemented Outputs / Artifacts
 
 - The chart component in `src/features/arbitrage/components/MarketChart.tsx` derives the current analytical views from the in-session market history.
 - The detail panel in `src/features/arbitrage/ArbitragePage.tsx` surfaces spread, median price, and a simple gas-adjusted estimate.
+- `src/features/arbitrage/insights.ts` derives the current Tab 1 insight cards and recent event feed from the same in-session market history.
+- `src/features/arbitrage/components/InsightsPanel.tsx` renders the live interpretation block between the hero chart surface and lower detail panels.
 
 ## In Progress / Partially Implemented
 
 - The current gas-adjusted estimate is intentionally simple and should not yet be treated as execution-grade profitability logic.
 - The chart behaviour still needs runtime refinement and validation to make the analytical modes reliably legible.
 - Historical analytics are session-only because no persistence layer exists yet.
+- The insights layer is currently deterministic and session-scoped; it does not yet include persistence-backed baselines, cooldown memory beyond in-session transitions, or richer opportunity classification.
 
 ## Planned / Missing / To Be Changed
 
@@ -27,6 +31,7 @@
 - Add opportunity logging, thresholds, and richer event classification.
 - Add persisted historical analytics so spread-over-time and related views are useful beyond the current session.
 - Introduce clearer comparative views where raw prices, spread, deviation, and actionability remain readable without visual clutter.
+- Expand the insights layer beyond the first ranking, spread, deviation, gas, and event rules once persistence exists and thresholds can be validated against longer-lived data.
 
 ## Notes / Design Considerations
 

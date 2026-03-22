@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fetchMarketOverview } from "./api";
+import { InsightsPanel } from "./components/InsightsPanel";
 import { MarketChart, type ChartMode } from "./components/MarketChart";
 import { PriceCard } from "./components/PriceCard";
+import { deriveInsightsView } from "./insights";
 import type { MarketOverview, PriceSnapshot } from "./types";
 
 const VENUES = [
@@ -29,21 +31,6 @@ const VENUES = [
     state: "Active",
     accent: "dex-accent-mint",
     summary: "Second reserve-based venue for visible cross-market divergence.",
-  },
-];
-
-const INSIGHTS = [
-  {
-    title: "Session cadence",
-    body: "The chart refreshes every second so venue changes remain visible without becoming noisy.",
-  },
-  {
-    title: "Line-first reading",
-    body: "Raw, deviation, spread, and gas-adjusted layers can be toggled into the same visual surface depending on whether you want showpiece or clarity.",
-  },
-  {
-    title: "Adapter direction",
-    body: "Curve and Balancer stay deferred until the current WETH/USDC comparison layer is validated on simpler pool types.",
   },
 ];
 
@@ -82,6 +69,7 @@ export function ArbitragePage() {
   const [chartMode, setChartMode] = useState<ChartMode>("spread");
   const [showEvents, setShowEvents] = useState(true);
   const requestInFlight = useRef(false);
+  const insights = history.length > 0 ? deriveInsightsView(history) : null;
 
   async function loadSnapshot() {
     if (requestInFlight.current) {
@@ -157,6 +145,8 @@ export function ArbitragePage() {
           onToggleEvents={() => setShowEvents((current) => !current)}
         />
       </section>
+
+      {insights ? <InsightsPanel insights={insights} /> : null}
 
       <section className="dashboard-grid">
         <section className="panel feature-panel">
@@ -264,15 +254,6 @@ export function ArbitragePage() {
             </div>
           </dl>
         </section>
-      </section>
-
-      <section className="insight-grid">
-        {INSIGHTS.map((insight) => (
-          <article className="panel insight-panel" key={insight.title}>
-            <h3>{insight.title}</h3>
-            <p>{insight.body}</p>
-          </article>
-        ))}
       </section>
     </main>
   );

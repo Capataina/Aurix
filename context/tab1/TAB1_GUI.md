@@ -10,12 +10,15 @@
 - The GUI keeps supporting text compact and uses the chart as the primary explanatory surface.
 - The GUI uses centralised theme and dashboard CSS rather than component-scoped utility styling.
 - The GUI currently includes a primary price card, venue lane panel, detail panel, and chart mode controls.
+- The live chart series now render as stroke-only paths so venue jumps do not produce accidental filled SVG shapes.
+- The GUI now includes a dedicated live `Insights` block positioned between the hero chart surface and the lower venue/detail panels.
 
 ## Implemented Outputs / Artifacts
 
 - `src/features/arbitrage/ArbitragePage.tsx` composes the current page structure and live refresh loop.
 - `src/features/arbitrage/components/PriceCard.tsx` renders the primary readout.
 - `src/features/arbitrage/components/MarketChart.tsx` renders the current chart modes and event markers.
+- `src/features/arbitrage/components/InsightsPanel.tsx` renders the new live interpretation surface for current signals and recent events.
 - `src/styles/theme.css` and `src/styles/dashboard.css` provide the shared visual system.
 
 ## In Progress / Partially Implemented
@@ -23,6 +26,7 @@
 - The GUI direction is now aligned with the agreed style, but the chart behaviour still needs refinement.
 - The GUI is currently focused on Tab 1 only and does not yet establish broader cross-tab desktop navigation.
 - The GUI still lacks persisted historical views and richer comparative panels.
+- The insights block is now present, but its rule catalogue is intentionally narrow and still needs runtime refinement against live market behaviour.
 
 ## Planned / Missing / To Be Changed
 

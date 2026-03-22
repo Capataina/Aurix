@@ -6,7 +6,7 @@
 .top-bar,
 .hero-card,
 .dashboard-grid,
-.insight-grid {
+.insights-panel {
   position: relative;
 }
 
@@ -263,33 +263,33 @@
   stroke-width: 2.5;
 }
 
+.chart-point {
+  fill: currentColor;
+}
+
 .chart-line-dashed {
   stroke-dasharray: 4 5;
   opacity: 0.78;
 }
 
-.chart-line-sky,
-.chart-point-sky {
+.chart-line-sky {
   stroke: var(--accent-sky);
-  fill: var(--accent-sky);
+  color: var(--accent-sky);
 }
 
-.chart-line-lilac,
-.chart-point-lilac {
+.chart-line-lilac {
   stroke: var(--accent-lilac);
-  fill: var(--accent-lilac);
+  color: var(--accent-lilac);
 }
 
-.chart-line-peach,
-.chart-point-peach {
+.chart-line-peach {
   stroke: var(--accent-peach);
-  fill: var(--accent-peach);
+  color: var(--accent-peach);
 }
 
-.chart-line-mint,
-.chart-point-mint {
+.chart-line-mint {
   stroke: var(--accent-mint);
-  fill: var(--accent-mint);
+  color: var(--accent-mint);
 }
 
 .chart-point-ring {
@@ -351,7 +351,7 @@
 }
 
 .dashboard-grid,
-.insight-grid {
+.insights-panel {
   display: grid;
   gap: 16px;
   margin-top: 16px;
@@ -361,13 +361,9 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
 }
 
-.insight-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .feature-panel,
 .detail-panel,
-.insight-panel {
+.insights-panel {
   padding: 18px;
 }
 
@@ -426,7 +422,7 @@
 }
 
 .exchange-header h3,
-.insight-panel h3 {
+.insights-panel h3 {
   margin: 0;
   font-size: 0.96rem;
   font-weight: 600;
@@ -494,21 +490,142 @@
   color: var(--copy-primary);
 }
 
-.insight-panel p {
-  margin: 8px 0 0;
+.insights-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+}
+
+.insights-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.insights-header p,
+.insight-primary-card p,
+.insight-secondary-card p,
+.insight-event-item p,
+.insight-event-empty {
+  margin: 0;
   color: var(--copy-muted);
   font-size: 0.88rem;
+}
+
+.insights-header p {
+  max-width: 52ch;
+}
+
+.insight-primary-card,
+.insight-secondary-card,
+.insight-event-panel {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.insight-primary-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(143, 211, 255, 0.08), transparent 40%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.insight-primary-card h3 {
+  font-size: 1.15rem;
+}
+
+.insight-secondary-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.insight-secondary-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.insight-card-topline,
+.insight-event-meta,
+.insight-event-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.insight-pill {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.insight-pill-info {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(235, 237, 242, 0.78);
+}
+
+.insight-pill-watch {
+  background: rgba(143, 211, 255, 0.1);
+  color: var(--accent-sky);
+}
+
+.insight-pill-notable {
+  background: rgba(255, 207, 152, 0.12);
+  color: var(--accent-peach);
+}
+
+.insight-pill-actionable {
+  background: rgba(151, 239, 201, 0.12);
+  color: var(--accent-mint);
+}
+
+.insight-metric {
+  color: var(--copy-primary);
+  font-size: 0.84rem;
+  letter-spacing: -0.01em;
+}
+
+.insight-event-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.insight-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.insight-event-item {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.insight-event-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.insight-event-meta {
+  color: var(--copy-faint);
+  font-size: 0.78rem;
 }
 
 @media (max-width: 1040px) {
   .hero-card,
   .dashboard-grid,
-  .insight-grid {
+  .insights-layout {
     grid-template-columns: 1fr;
   }
 
   .chart-header,
-  .top-bar {
+  .top-bar,
+  .insights-header {
     flex-direction: column;
   }
 
@@ -525,7 +642,7 @@
   .hero-card,
   .feature-panel,
   .detail-panel,
-  .insight-panel {
+  .insights-panel {
     padding: 16px;
   }
 
