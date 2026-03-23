@@ -1,0 +1,85 @@
+# Arbitrage GUI
+
+## Scope / Purpose
+
+- This document owns the current desktop presentation layer for the arbitrage feature: page composition, component boundaries, dashboard styling, and shell-level metadata that directly affects what the user sees.
+
+## Boundaries / Ownership
+
+- This file owns `src/App.tsx`, `src/features/arbitrage/ArbitragePage.tsx`, the presentational components in `src/features/arbitrage/components/`, and the CSS files in `src/styles/`.
+- It also owns user-facing shell metadata still exposed through `index.html` and the Tauri window definition in `src-tauri/tauri.conf.json`.
+- It does not own backend market acquisition or the rule logic that computes insights from session history, except where those outputs are rendered to the user.
+
+| Area | Owned here | Excluded from this file |
+| --- | --- | --- |
+| Page composition | Screen layout, venue cards, detail panel, chart placement | Backend fetch orchestration |
+| Presentational components | Price readout, chart rendering, insight/event rendering | Insight rule calculation internals |
+| Visual system | Theme tokens, dashboard layout, class-based styling | Backend payload semantics |
+| Shell metadata | Browser title, favicon reference, Tauri window title and size | RPC config and chain access |
+
+## Current Implemented Reality
+
+| Surface | Current implementation reality |
+| --- | --- |
+| App root | `src/App.tsx` renders one full-screen arbitrage page with no routing and no cross-tab navigation |
+| Page layout | `ArbitragePage.tsx` lays out a top bar, hero panel, chart panel, insights panel, venue list, and detail list inside one dashboard screen |
+| Shell status copy | The top bar hard-codes three mode pills: `Ethereum mainnet`, `WETH / USDC`, and `1s cadence` |
+| Venue presentation | A static `VENUES` array defines labels, accents, summaries, and state text separately from the live backend payload |
+| Hero card | `PriceCard.tsx` shows the first returned venue as the primary market readout, plus gas price, timestamp, error banner, and manual refresh control |
+| Chart surface | `MarketChart.tsx` renders the main SVG chart surface, mode controls, legend, and optional event markers |
+| Insight surface | `InsightsPanel.tsx` renders the primary insight card, up to four secondary cards, and a recent-events list derived elsewhere |
+| Visual system | `theme.css` and `dashboard.css` implement a dark, dense monitoring layout using plain CSS rather than a component library or utility framework |
+| Shell metadata | `index.html` still references `/vite.svg` and uses the title `Tauri + React + Typescript`, while `tauri.conf.json` still uses the lower-case product and window title `aurix` |
+
+## Key Interfaces / Data Flow
+
+| Surface | Inputs | Output to user |
+| --- | --- | --- |
+| `ArbitragePage` | Live `MarketOverview`, local `history`, UI state for chart mode and event toggle | Whole page composition and state orchestration |
+| `PriceCard` | Primary `PriceSnapshot`, gas price, loading/error state | Hero-side live price readout and refresh affordance |
+| `MarketChart` | Session history plus chart-mode state | SVG time-series visualisation and mode-specific metrics |
+| `InsightsPanel` | `InsightsViewModel` | Textual interpretation and event feed |
+| `theme.css` / `dashboard.css` | Global class names from the React tree | Layout, spacing, colour tokens, chart styling, responsive collapse |
+
+- Rendering is prop-driven after the `ArbitragePage` boundary; lower-level components do not own data fetching.
+- The current screen is deliberately chart-first and keeps copy compact, but most content is still hard-coded around one pair and one feature.
+
+## Implemented Outputs / Artifacts
+
+- `src/App.tsx` provides the single-screen root.
+- `src/features/arbitrage/ArbitragePage.tsx` provides page orchestration and high-level layout.
+- `src/features/arbitrage/components/PriceCard.tsx` provides the hero-side price readout.
+- `src/features/arbitrage/components/MarketChart.tsx` provides the comparative chart surface.
+- `src/features/arbitrage/components/InsightsPanel.tsx` provides the live interpretation surface.
+- `src/styles/theme.css` and `src/styles/dashboard.css` provide the current visual system.
+- `index.html` and `src-tauri/tauri.conf.json` provide browser-shell and desktop-window metadata.
+
+## Known Issues / Active Risks
+
+- Some UI copy is stale relative to the backend: `PriceCard.tsx` still says "Three live Ethereum venue reads" even though four venues are rendered and fetched.
+- The page chooses `overview.venues[0]` as the primary market without any explicit semantic contract beyond array order, so a backend ordering change would silently change the hero view.
+- The static `VENUES` metadata must stay manually aligned with backend venue names or price lookups and accent mapping will drift.
+- Error handling is whole-screen only because the backend cannot currently report per-venue health.
+- Starter shell metadata remains visible in the browser wrapper and product naming, which weakens the sense of a finished desktop surface.
+
+## Partial / In Progress
+
+- The visual direction is coherent and responsive for one dashboard, but the broader product shell is still essentially scaffold-level.
+- The screen already exposes several monitoring surfaces, but it is still a single-page monitor rather than a multi-feature local analytics desktop app.
+
+## Planned / Missing / Likely Changes
+
+- Replace starter browser-shell metadata and product naming once shell polish becomes part of active implementation rather than tolerated scaffolding.
+- Add navigation or broader framing only when a second implemented feature exists; earlier shell abstraction would be premature.
+- Move venue presentation metadata closer to the live data contract if venue count, labels, or states begin changing more often.
+- Add source-health indicators and stale-state visuals once the backend can emit partial-success information.
+
+## Durable Notes / Discarded Approaches
+
+- The UI is intentionally read-only and interpretive; it is not designed as a trading terminal or wallet-connected execution surface.
+- Centralising style in plain CSS keeps the current visual language coherent for a small app, but it also means many components depend on shared class contracts instead of isolated component-level styling.
+
+## Obsolete / No Longer Relevant
+
+- The default Tauri greeting UI is obsolete.
+- Any assumption that the repository already contains a multi-tab or route-driven desktop shell is not current.
