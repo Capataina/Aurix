@@ -56,11 +56,12 @@
 
 ## Known Issues / Active Risks
 
-- Some UI copy is stale relative to the backend: `PriceCard.tsx` still says "Three live Ethereum venue reads" even though four venues are rendered and fetched.
-- The page chooses `overview.venues[0]` as the primary market without any explicit semantic contract beyond array order, so a backend ordering change would silently change the hero view.
-- The static `VENUES` metadata must stay manually aligned with backend venue names or price lookups and accent mapping will drift.
+- Stale-copy drift around venue count lives in three places — `src/features/arbitrage/components/PriceCard.tsx:48` (`Three live Ethereum venue reads…`), `src/features/arbitrage/ArbitragePage.tsx:222` (fallback string `"3"` for active-venues detail row), and the backend rustdoc at `src-tauri/src/commands/market.rs:11`. All three should be updated together when this is addressed.
+- The page chooses `overview.venues[0]` as the primary market without any explicit semantic contract beyond array order, so a backend ordering change would silently change the hero view (`ArbitragePage.tsx:86`).
+- The static `VENUES` metadata in `ArbitragePage.tsx:10-35` and the `SERIES_META` table in `MarketChart.tsx:30-47` both key off `dexName` string equality. They are separate copies of the same venue-identity keyspace and must stay aligned with the backend labels or: (a) the venue card shows `$0.00` from the `?? 0` fallback in the price lookup, and (b) the chart crashes on `SERIES_META[venueName].accentClassName` because the lookup returns undefined.
 - Error handling is whole-screen only because the backend cannot currently report per-venue health.
-- Starter shell metadata remains visible in the browser wrapper and product naming, which weakens the sense of a finished desktop surface.
+- Starter shell metadata remains visible: `index.html` still has title `Tauri + React + Typescript` and references `/vite.svg` as the favicon; `tauri.conf.json` uses lower-case `productName: "aurix"` and window title `aurix`; `Cargo.toml` has `description = "A Tauri App"` and `authors = ["you"]`.
+- `PriceCard.tsx` falls back to `"Uniswap V3"` and `"WETH / USDC"` string literals when `snapshot` is null (`PriceCard.tsx:58,61`); if a future backend change renames the V3 5bps label, this fallback also drifts.
 
 ## Partial / In Progress
 

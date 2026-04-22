@@ -34,19 +34,41 @@
 
 ## Implemented Outputs / Artifacts
 
-- `src/main.tsx` boots React and applies the shared stylesheets.
-- `src/App.tsx` provides the current single-screen root.
-- `src-tauri/src/main.rs` and `src-tauri/src/lib.rs` provide the desktop process entrypoints.
-- `src-tauri/src/config.rs` provides environment resolution for mainnet RPC access.
-- `src-tauri/src/ethereum/client.rs` provides the low-level RPC transport reused by all adapters.
-- `src-tauri/src/market/types.rs` and `src/features/arbitrage/types.ts` provide the current cross-runtime payload contract.
+| Artifact | Role | Consumed by |
+| --- | --- | --- |
+| `src/main.tsx` | Boots React and applies the shared stylesheets (`theme.css`, `dashboard.css`) | Browser shell (via `index.html`) |
+| `src/App.tsx` | Single-screen React root that mounts `ArbitragePage` | `main.tsx` |
+| `src-tauri/src/main.rs` | Desktop binary entrypoint; delegates to `aurix_lib::run()` | OS process loader |
+| `src-tauri/src/lib.rs` | Tauri builder; registers `fetch_market_overview` and the opener plugin | `main.rs` |
+| `src-tauri/src/config.rs` | Environment resolution for mainnet RPC access | `commands/market.rs` |
+| `src-tauri/src/ethereum/client.rs` | Low-level JSON-RPC transport (`eth_call`, `eth_gasPrice`) | Every DEX adapter + the market command |
+| `src-tauri/src/market/types.rs` | Rust-side `MarketOverview`/`PriceSnapshot` definitions (snake_case; camelCase at wire) | Every backend adapter + `commands/market.rs` |
+| `src/features/arbitrage/types.ts` | TypeScript mirror of the market payload | Every frontend file that touches market data |
+
+The runtime substrate below the feature layer is a narrow line:
+
+```text
+.env / ALCHEMY_API_KEY / MAINNET_RPC_URL
+       |
+       v (Once-guarded dotenv load)
+  AppConfig::from_environment  ----->  one EthereumRpcClient  ----->  DEX adapters
+                                                         `----->  gas_price_gwei
+                                                                        |
+                                                                        v
+                                                             MarketOverview (camelCase JSON)
+                                                                        |
+                                                                        v
+                                                             React ArbitragePage state
+```
 
 ## Known Issues / Active Risks
 
 - Configuration support is hard-coded to direct RPC URLs or Alchemy, so swapping providers later will require editing this shared layer rather than configuration-only changes.
-- The runtime contract has no explicit stale-data, partial-success, or per-venue health fields, which limits how the frontend can explain backend failures.
+- The runtime contract has no explicit stale-data, partial-success, or per-venue health fields, which limits how the frontend can explain backend failures (see `systems/arbitrage-market-data.md` for how this propagates).
 - The shared payload uses floating-point values for prices and gas, which is convenient for presentation but not ideal for precision-critical historical or execution-grade logic.
 - There is no automated verification around env fallback, JSON-RPC error decoding, or serialisation compatibility.
+- A single RPC endpoint backs every feature in the product. If the endpoint rate-limits, drops, or changes its JSON-RPC semantics, every venue read and the gas read fail simultaneously — the 1 Hz loop surfaces a continuous error banner with no alternate path. This is the most consequential external dependency in the repository and is called out in `architecture.md` §Critical Paths and Blast Radius.
+- The Rust ↔ TypeScript payload mirror has no automated contract check. A field rename in `src-tauri/src/market/types.rs` compiles clean on both sides and fails silently at runtime unless `src/features/arbitrage/types.ts` is updated in the same change. The Serde `rename_all = "camelCase"` attribute is the only wire-level convention that bridges the two.
 
 ## Partial / In Progress
 
@@ -64,6 +86,9 @@
 
 - The runtime layer is intentionally read-only and should stay separate from any future write-capable wallet or transaction flow unless the project scope itself changes at the README level.
 - The shared RPC client already isolates JSON-RPC transport from protocol decoding, which is worth preserving because V2 and V3 readers have different decoding paths and failure modes.
+- `ENVIRONMENT_BOOTSTRAP: Once` in `config.rs` guarantees `.env` loading is idempotent for the process lifetime. This matters because `from_environment()` is called on every `fetch_market_overview` invocation (once per second); without the `Once`, dotenv files would be re-parsed every tick. Before changing this to a per-call load or moving env resolution elsewhere, confirm the 1 Hz cadence has changed — otherwise the current shape is deliberately efficient.
+- The rustdoc style across backend modules (`config.rs`, `ethereum/client.rs`, `commands/market.rs`, `dex/uniswap_v3.rs`) uses an explicit four-line contract: `Inputs:`, `Outputs:`, `Errors:`, `Side effects:`. See `notes/rust-doc-style.md`. This is informal but consistent; future code should follow it to keep the public surface self-describing.
+- Error handling is one `thiserror::Error` enum per module, with `#[error(transparent)]` wrapping `EthereumRpcError` in adapter error enums. See `notes/error-handling.md`. This keeps boundaries self-contained and avoids a grand unified error type.
 
 ## Obsolete / No Longer Relevant
 

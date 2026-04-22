@@ -42,11 +42,21 @@
 
 ## Known Issues / Active Risks
 
-- Analytical primitives are duplicated across files, so a future formula change can drift between detail metrics, charts, and insight text.
+- Analytical primitives are duplicated across files, so a future formula change can drift between detail metrics, charts, and insight text. Concrete loci:
+
+  | Primitive | Copies | Locations | Drift status |
+  | --- | --- | --- | --- |
+  | `median()` | 3 | `ArbitragePage.tsx:49`, `MarketChart.tsx:80`, `insights.ts:382` | Identical — no drift yet |
+  | `formatUsd()` | 4 | `ArbitragePage.tsx:41`, `PriceCard.tsx:11`, `MarketChart.tsx:56`, `insights.ts:415` | **Drifted** — `insights.ts` uses `signDisplay: "exceptZero"`, the other three use default |
+  | `GAS_UNITS_ESTIMATE = 220_000` | 3 | `ArbitragePage.tsx:39`, `MarketChart.tsx:28`, `insights.ts:3` | Identical — no drift yet |
+  | Gas-adjusted formula `(gasPriceGwei * GAS_UNITS_ESTIMATE * medianPrice) / 1_000_000_000` | 3 | Same three files | Identical; any precision or heuristic change must touch all three |
+
+  A future formula or heuristic change must be applied in every row above or the detail panel, chart, and insight text will show inconsistent numbers.
 - The fixed `220,000` gas-unit assumption is a coarse heuristic and should not be treated as execution-grade profitability logic.
 - History is session-only, so baseline windows, persistence runs, and events reset on restart and do not represent long-lived market behaviour.
 - The chart treats any positive gas-adjusted value as an event marker, which is useful for scanning but is not a full opportunity-classification model.
 - There is no test coverage for median calculation, run-length logic, baseline comparisons, or event transitions.
+- `deriveInsightsView(history)` is called unconditionally when `history.length > 0` in `ArbitragePage.tsx`; any uncaught exception it throws would surface as a full React error. Nothing catches it — consider a React error boundary or a try/catch around the call if analytical edge cases start surfacing.
 
 ## Partial / In Progress
 

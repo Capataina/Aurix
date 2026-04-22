@@ -46,6 +46,8 @@
 - Prices are hard-coded to one chain and one pair, so there is no protection yet against the assumptions leaking into later pair-selection work.
 - The gas read is a single-point estimate only and should not be treated as a robust execution model.
 - The V3 price conversion uses `BigUint` to `f64` conversion, which is acceptable for the current dashboard but introduces precision risk if the backend is later used for stricter quantitative modelling.
+- `dex_name` string values (`"Uniswap V3 5bps"`, `"Uniswap V3 30bps"`, `"Uniswap V2"`, `"SushiSwap"`) are an implicit cross-system contract. The GUI's `VENUES` array in `src/features/arbitrage/ArbitragePage.tsx` and `SERIES_META` in `src/features/arbitrage/components/MarketChart.tsx` both use these exact strings as lookup keys for price binding and chart-line colour mapping. Renaming a label here without updating both frontend modules silently drops the rendered price and the chart colour for that venue — see `systems/arbitrage-gui.md` and `architecture.md` §Critical Paths and Blast Radius.
+- The rustdoc on `commands::market::fetch_market_overview` still says "three live venue snapshots" at `src-tauri/src/commands/market.rs:11`; the code actually returns four. This is one of three stale-copy sites flagged in `architecture.md` §Structural Notes.
 
 ## Partial / In Progress
 
