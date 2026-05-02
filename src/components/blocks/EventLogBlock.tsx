@@ -12,7 +12,7 @@ const SEVERITY_DOT: Record<InsightSeverity, string> = {
   actionable: "var(--status-up)",
 };
 
-export function EventLogBlock({ market, onRemove }: BlockRenderProps) {
+export function EventLogBlock({ market, pnlMode, onRemove }: BlockRenderProps) {
   const { history } = market;
 
   if (history.length === 0) {
@@ -23,7 +23,7 @@ export function EventLogBlock({ market, onRemove }: BlockRenderProps) {
     );
   }
 
-  const { events } = deriveInsightsView(history);
+  const { events } = deriveInsightsView(history, pnlMode);
 
   return (
     <Card title="Events" subtitle={`${events.length}`} onRemove={onRemove}>

@@ -11,6 +11,7 @@ import {
   StatsIcon,
 } from "../primitives/Icon";
 import type { MarketState } from "../../hooks/useMarketData";
+import type { PnlMode } from "../../lib/arbitrage";
 
 import { ArbitrageMatrixBlock } from "./ArbitrageMatrixBlock";
 import { ArbRouteBlock } from "./ArbRouteBlock";
@@ -30,6 +31,7 @@ import { VolatilityBlock } from "./VolatilityBlock";
 
 export interface BlockRenderProps {
   market: MarketState;
+  pnlMode: PnlMode;
   onRemove: () => void;
 }
 

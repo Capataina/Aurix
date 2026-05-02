@@ -16,9 +16,11 @@ import {
 } from "../../components/blocks/BlockRegistry";
 import type { MarketState } from "../../hooks/useMarketData";
 import { usePersistedState } from "../../hooks/usePersistedState";
+import type { PnlMode } from "../../lib/arbitrage";
 
 interface ArbitragePageProps {
   market: MarketState;
+  pnlMode: PnlMode;
   drawerOpen: boolean;
   onCloseDrawer: () => void;
 }
@@ -118,7 +120,7 @@ function clampPosition(x: number, w: number, cols: number): number {
   return Math.max(0, Math.min(x, cols - w));
 }
 
-export function ArbitragePage({ market, drawerOpen, onCloseDrawer }: ArbitragePageProps) {
+export function ArbitragePage({ market, pnlMode, drawerOpen, onCloseDrawer }: ArbitragePageProps) {
   const [layouts, setLayouts] = usePersistedState<ResponsiveLayoutMap>(
     LAYOUT_STORAGE_KEY,
     DEFAULT_LAYOUTS,
@@ -315,6 +317,7 @@ export function ArbitragePage({ market, drawerOpen, onCloseDrawer }: ArbitragePa
               <div key={block.id}>
                 <block.Component
                   market={market}
+                  pnlMode={pnlMode}
                   onRemove={() => handleRemoveBlock(block.id)}
                 />
               </div>

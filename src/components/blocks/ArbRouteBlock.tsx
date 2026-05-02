@@ -1,24 +1,29 @@
 import { Card } from "../primitives/Card";
 import { Pill } from "../primitives/Pill";
 import { GAS_UNITS_ESTIMATE } from "../../lib/config";
+import { findBestRoute } from "../../lib/arbitrage";
 import {
   formatGweiSmart,
   formatPreciseUsd,
   formatSignedUsd,
   formatUsd,
 } from "../../lib/format";
-import { median } from "../../lib/stats";
-import { findExtremes, shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 /**
- * The single most important card if you're trying to read what the dashboard
- * is telling you: shows the explicit best arbitrage route as
- *   BUY at <cheapest venue, with price>
- *   SELL at <richest venue, with price>
- * plus a clean breakdown of spread − gas = net, and an at-a-glance verdict.
+ * Read-it-in-one-glance trade summary. In `gas` mode the math is
+ *   spread − gas = net.
+ * In `gas-and-fees` mode the math is the full pool-fee-aware round trip:
+ *   USDC paid (price/(1-buyFee))   minus
+ *   USDC received (price·(1-sellFee)) minus
+ *   gas cost = net.
+ *
+ * The same `findBestRoute()` call powers both modes — switching modes only
+ * changes which pair wins (fees can flip the optimum) and what's shown in
+ * the math breakdown.
  */
-export function ArbRouteBlock({ market, onRemove }: BlockRenderProps) {
+export function ArbRouteBlock({ market, pnlMode, onRemove }: BlockRenderProps) {
   const { overview } = market;
 
   if (!overview || overview.venues.length === 0) {
@@ -29,8 +34,8 @@ export function ArbRouteBlock({ market, onRemove }: BlockRenderProps) {
     );
   }
 
-  const extremes = findExtremes(overview.venues);
-  if (!extremes) {
+  const route = findBestRoute(overview.venues, overview.gasPriceGwei, pnlMode);
+  if (!route) {
     return (
       <Card title="Best route" subtitle="—" onRemove={onRemove}>
         <div className="card-empty">Awaiting first sample.</div>
@@ -38,24 +43,20 @@ export function ArbRouteBlock({ market, onRemove }: BlockRenderProps) {
     );
   }
 
-  const spread = extremes.richest.priceUsd - extremes.cheapest.priceUsd;
-  const medianPrice = median(overview.venues.map((venue) => venue.priceUsd));
-  const gasCostUsd =
-    (overview.gasPriceGwei * GAS_UNITS_ESTIMATE * medianPrice) / 1_000_000_000;
-  const net = spread - gasCostUsd;
+  const verdictTone = route.netUsd > 0 ? "up" : "down";
+  const verdictLabel = route.netUsd > 0 ? "PROFITABLE" : "UNPROFITABLE";
 
-  const verdictTone = net > 0 ? "up" : "down";
-  const verdictLabel = net > 0 ? "PROFITABLE" : "UNPROFITABLE";
+  const subtitle = `${shortenVenueName(route.buy.dexName)} → ${shortenVenueName(
+    route.sell.dexName,
+  )}`;
 
   return (
     <Card
       title="Best route"
-      subtitle={`${shortenVenueName(extremes.cheapest.dexName)} → ${shortenVenueName(
-        extremes.richest.dexName,
-      )}`}
+      subtitle={subtitle}
       onRemove={onRemove}
       headerExtra={
-        <Pill tone={verdictTone} showDot pulse={net > 0}>
+        <Pill tone={verdictTone} showDot pulse={route.netUsd > 0}>
           {verdictLabel}
         </Pill>
       }
@@ -64,50 +65,104 @@ export function ArbRouteBlock({ market, onRemove }: BlockRenderProps) {
         <div className="arb-route-leg">
           <span className="arb-route-leg-tag is-up">BUY</span>
           <span className="arb-route-venue">
-            <span className={`dot ${venueSwatchByIndex(extremes.cheapestIndex)}`} />
-            {shortenVenueName(extremes.cheapest.dexName)}
+            <span className={`dot ${venueSwatchByIndex(route.buyIndex)}`} />
+            {shortenVenueName(route.buy.dexName)}
           </span>
           <span className="arb-route-price mono">
-            {formatPreciseUsd(extremes.cheapest.priceUsd, 2)}
+            {pnlMode === "gas-and-fees"
+              ? formatPreciseUsd(route.buyCostUsd, 2)
+              : formatPreciseUsd(route.buy.priceUsd, 2)}
           </span>
         </div>
 
         <div className="arb-route-leg">
           <span className="arb-route-leg-tag is-down">SELL</span>
           <span className="arb-route-venue">
-            <span className={`dot ${venueSwatchByIndex(extremes.richestIndex)}`} />
-            {shortenVenueName(extremes.richest.dexName)}
+            <span className={`dot ${venueSwatchByIndex(route.sellIndex)}`} />
+            {shortenVenueName(route.sell.dexName)}
           </span>
           <span className="arb-route-price mono">
-            {formatPreciseUsd(extremes.richest.priceUsd, 2)}
+            {pnlMode === "gas-and-fees"
+              ? formatPreciseUsd(route.sellProceedsUsd, 2)
+              : formatPreciseUsd(route.sell.priceUsd, 2)}
           </span>
         </div>
 
         <div className="route-divider" />
 
         <div className="arb-route-math">
-          <div className="arb-route-math-row">
-            <span className="arb-route-math-label">spread</span>
-            <span className="arb-route-math-value mono">{formatUsd(spread)}</span>
-          </div>
-          <div className="arb-route-math-row">
-            <span className="arb-route-math-label">
-              gas <span className="mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                ({formatGweiSmart(overview.gasPriceGwei)} × {GAS_UNITS_ESTIMATE.toLocaleString()})
-              </span>
-            </span>
-            <span className="arb-route-math-value mono is-down">
-              −{formatUsd(gasCostUsd)}
-            </span>
-          </div>
+          {pnlMode === "gas-and-fees" ? (
+            <>
+              <div className="arb-route-math-row">
+                <span className="arb-route-math-label">spread</span>
+                <span className="arb-route-math-value mono">
+                  {formatUsd(route.spreadUsd)}
+                </span>
+              </div>
+              <div className="arb-route-math-row">
+                <span className="arb-route-math-label">
+                  pool fees{" "}
+                  <span
+                    className="mono"
+                    style={{ fontSize: 10, color: "var(--text-muted)" }}
+                  >
+                    ({(route.buy.feeTierBps / 100).toFixed(2)}% +{" "}
+                    {(route.sell.feeTierBps / 100).toFixed(2)}%)
+                  </span>
+                </span>
+                <span className="arb-route-math-value mono is-down">
+                  −{formatUsd(route.feeCostUsd)}
+                </span>
+              </div>
+              <div className="arb-route-math-row">
+                <span className="arb-route-math-label">
+                  gas{" "}
+                  <span
+                    className="mono"
+                    style={{ fontSize: 10, color: "var(--text-muted)" }}
+                  >
+                    ({formatGweiSmart(overview.gasPriceGwei)} ×{" "}
+                    {GAS_UNITS_ESTIMATE.toLocaleString()})
+                  </span>
+                </span>
+                <span className="arb-route-math-value mono is-down">
+                  −{formatUsd(route.gasCostUsd)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="arb-route-math-row">
+                <span className="arb-route-math-label">spread</span>
+                <span className="arb-route-math-value mono">
+                  {formatUsd(route.spreadUsd)}
+                </span>
+              </div>
+              <div className="arb-route-math-row">
+                <span className="arb-route-math-label">
+                  gas{" "}
+                  <span
+                    className="mono"
+                    style={{ fontSize: 10, color: "var(--text-muted)" }}
+                  >
+                    ({formatGweiSmart(overview.gasPriceGwei)} ×{" "}
+                    {GAS_UNITS_ESTIMATE.toLocaleString()})
+                  </span>
+                </span>
+                <span className="arb-route-math-value mono is-down">
+                  −{formatUsd(route.gasCostUsd)}
+                </span>
+              </div>
+            </>
+          )}
           <div className="arb-route-math-row arb-route-math-net">
             <span className="arb-route-math-label">net</span>
             <span
               className={`arb-route-math-value mono ${
-                net > 0 ? "is-up" : "is-down"
+                route.netUsd > 0 ? "is-up" : "is-down"
               }`}
             >
-              {formatSignedUsd(net)}
+              {formatSignedUsd(route.netUsd)}
             </span>
           </div>
         </div>

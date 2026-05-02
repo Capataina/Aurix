@@ -1,6 +1,7 @@
 import { PanelRightIcon, RefreshIcon } from "../primitives/Icon";
 import type { RefreshIntervalMs } from "../../hooks/useMarketData";
 import type { PairSummary } from "../../features/arbitrage/types";
+import type { PnlMode } from "../../lib/arbitrage";
 
 export type ConnectionStatus = "live" | "stale" | "down" | "paused";
 
@@ -12,6 +13,8 @@ interface TopBarProps {
   pairs: PairSummary[];
   pairId: string;
   onSelectPair: (pairId: string) => void;
+  pnlMode: PnlMode;
+  onSelectPnlMode: (mode: PnlMode) => void;
   intervalMs: RefreshIntervalMs;
   onSelectInterval: (interval: RefreshIntervalMs) => void;
   onRefresh: () => void;
@@ -48,6 +51,10 @@ const INTERVAL_OPTIONS: Array<{ value: RefreshIntervalMs; label: string }> = [
   { value: 0, label: "Paused" },
 ];
 
+function TopBarDivider() {
+  return <span className="topbar-divider" aria-hidden />;
+}
+
 export function TopBar({
   activeTabId,
   onSelectTab,
@@ -56,14 +63,15 @@ export function TopBar({
   pairs,
   pairId,
   onSelectPair,
+  pnlMode,
+  onSelectPnlMode,
   intervalMs,
   onSelectInterval,
   onRefresh,
   onToggleDrawer,
   drawerOpen,
 }: TopBarProps) {
-  const activePair = pairs.find((entry) => entry.id === pairId);
-  const fallbackLabel = activePair?.label ?? pairId;
+  const poolFeesActive = pnlMode === "gas-and-fees";
 
   return (
     <header className="topbar">
@@ -97,39 +105,60 @@ export function TopBar({
       </nav>
 
       <div className="topbar-actions">
-        <div className="topbar-meta">
-          <span className="topbar-status">
-            <span
-              className={`topbar-status-dot ${
-                connectionStatus === "live"
-                  ? ""
-                  : connectionStatus === "stale"
-                    ? "is-stale"
-                    : connectionStatus === "paused"
-                      ? "is-paused"
-                      : "is-down"
-              }`}
-            />
-            {STATUS_LABEL[connectionStatus]} · {connectionLabel}
-          </span>
-        </div>
+        <span className="topbar-status">
+          <span
+            className={`topbar-status-dot ${
+              connectionStatus === "live"
+                ? ""
+                : connectionStatus === "stale"
+                  ? "is-stale"
+                  : connectionStatus === "paused"
+                    ? "is-paused"
+                    : "is-down"
+            }`}
+          />
+          {STATUS_LABEL[connectionStatus]} · {connectionLabel}
+        </span>
 
-        <select
-          className="topbar-select"
-          value={pairId}
-          onChange={(event) => onSelectPair(event.target.value)}
-          aria-label="Trading pair"
+        <TopBarDivider />
+
+        {pairs.length > 0 ? (
+          <div
+            className="topbar-segmented"
+            role="group"
+            aria-label="Trading pair"
+          >
+            {pairs.map((pair) => (
+              <button
+                key={pair.id}
+                type="button"
+                className={`topbar-segment ${pair.id === pairId ? "is-active" : ""}`}
+                onClick={() => onSelectPair(pair.id)}
+                aria-pressed={pair.id === pairId}
+                title={pair.label}
+              >
+                {pair.baseSymbol}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <TopBarDivider />
+
+        <button
+          type="button"
+          className={`topbar-switch ${poolFeesActive ? "is-active" : ""}`}
+          onClick={() => onSelectPnlMode(poolFeesActive ? "gas" : "gas-and-fees")}
+          aria-pressed={poolFeesActive}
+          title="Subtract pool fees in addition to gas when reporting net P/L"
         >
-          {pairs.length === 0 ? (
-            <option value={pairId}>{fallbackLabel}</option>
-          ) : (
-            pairs.map((pair) => (
-              <option key={pair.id} value={pair.id}>
-                {pair.label}
-              </option>
-            ))
-          )}
-        </select>
+          <span className="topbar-switch-track" aria-hidden>
+            <span className="topbar-switch-thumb" />
+          </span>
+          Pool fees
+        </button>
+
+        <TopBarDivider />
 
         <select
           className="topbar-select"
@@ -155,6 +184,8 @@ export function TopBar({
         >
           <RefreshIcon className="topbar-button-icon" />
         </button>
+
+        <TopBarDivider />
 
         <button
           type="button"

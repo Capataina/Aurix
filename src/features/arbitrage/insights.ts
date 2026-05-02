@@ -1,5 +1,6 @@
 import type { MarketOverview, PriceSnapshot } from "./types";
 import { GAS_UNITS_ESTIMATE } from "../../lib/config";
+import { findBestRoute, type PnlMode } from "../../lib/arbitrage";
 
 const SHORT_WINDOW = 5;
 const BASELINE_WINDOW = 20;
@@ -49,9 +50,16 @@ interface DerivedSample {
 
 /**
  * Converts the current in-session history into a stable set of user-facing insights.
+ *
+ * `pnlMode` selects whether the gas-adjusted view subtracts only gas or also
+ * pool fees. The same history powers both modes; switching is a re-derivation,
+ * not a state change.
  */
-export function deriveInsightsView(history: MarketOverview[]): InsightsViewModel {
-  const derivedHistory = history.map(deriveSample);
+export function deriveInsightsView(
+  history: MarketOverview[],
+  pnlMode: PnlMode = "gas",
+): InsightsViewModel {
+  const derivedHistory = history.map((overview) => deriveSample(overview, pnlMode));
   const latest = derivedHistory[derivedHistory.length - 1];
   const previous = derivedHistory[derivedHistory.length - 2] ?? null;
   const baselineSlice = derivedHistory.slice(-Math.min(derivedHistory.length, BASELINE_WINDOW));
@@ -347,14 +355,17 @@ function buildInsightEvents(
   return events.slice(-EVENT_LIMIT).reverse();
 }
 
-function deriveSample(overview: MarketOverview): DerivedSample {
+function deriveSample(overview: MarketOverview, pnlMode: PnlMode): DerivedSample {
   const sortedByPrice = [...overview.venues].sort((left, right) => left.priceUsd - right.priceUsd);
   const medianPrice = median(overview.venues.map((venue) => venue.priceUsd));
   const cheapestVenue = sortedByPrice[0];
   const richestVenue = sortedByPrice[sortedByPrice.length - 1];
   const spreadUsd = richestVenue.priceUsd - cheapestVenue.priceUsd;
   const gasCostUsd = (overview.gasPriceGwei * GAS_UNITS_ESTIMATE * medianPrice) / 1_000_000_000;
-  const gasAdjustedUsd = spreadUsd - gasCostUsd;
+  // Best-route net under the active mode. This is what drives the
+  // "actionable / watch / notable" severity of the gas-adjusted view + events.
+  const bestRoute = findBestRoute(overview.venues, overview.gasPriceGwei, pnlMode);
+  const gasAdjustedUsd = bestRoute?.netUsd ?? spreadUsd - gasCostUsd;
   const deviationPairs = overview.venues.map((venue) => ({
     venue,
     deviationPct: ((venue.priceUsd - medianPrice) / medianPrice) * 100,

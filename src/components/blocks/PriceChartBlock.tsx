@@ -5,19 +5,20 @@ import {
   formatSignedPercent,
   formatUsd,
 } from "../../lib/format";
-import { GAS_UNITS_ESTIMATE, SLOT_COUNT } from "../../lib/config";
+import { findBestRoute } from "../../lib/arbitrage";
+import { SLOT_COUNT } from "../../lib/config";
 import { median } from "../../lib/stats";
 import { venueSwatchByIndex, type SwatchClass } from "../../lib/venues";
 import type { MarketOverview } from "../../features/arbitrage/types";
 import type { BlockRenderProps } from "./BlockRegistry";
 
-type ChartMode = "raw" | "deviation" | "spread" | "gas";
+type ChartMode = "raw" | "deviation" | "spread" | "net";
 
 const MODE_LABELS: Record<ChartMode, string> = {
   raw: "Raw",
   deviation: "Deviation",
   spread: "Spread",
-  gas: "Gas-adjusted",
+  net: "Net P/L",
 };
 
 interface RenderSeries {
@@ -59,22 +60,33 @@ function xForIndex(index: number, occupiedOffset: number, left: number, width: n
   return left + ((occupiedOffset + index) / (SLOT_COUNT - 1)) * width;
 }
 
-function deriveSamples(history: MarketOverview[]) {
+interface DerivedSample {
+  overview: MarketOverview;
+  medianPrice: number;
+  spread: number;
+  /** Best-route net under the active mode (post gas, optionally post fees). */
+  netUsd: number;
+}
+
+function deriveSamples(
+  history: MarketOverview[],
+  pnlMode: BlockRenderProps["pnlMode"],
+): DerivedSample[] {
   return history.map((overview) => {
     const prices = overview.venues.map((venue) => venue.priceUsd);
     const medianPrice = median(prices);
     const spread = Math.max(...prices) - Math.min(...prices);
-    const gasCost = (overview.gasPriceGwei * GAS_UNITS_ESTIMATE * medianPrice) / 1_000_000_000;
+    const route = findBestRoute(overview.venues, overview.gasPriceGwei, pnlMode);
     return {
       overview,
       medianPrice,
       spread,
-      gasAdjusted: spread - gasCost,
+      netUsd: route?.netUsd ?? spread,
     };
   });
 }
 
-export function PriceChartBlock({ market, onRemove }: BlockRenderProps) {
+export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps) {
   const [mode, setMode] = useState<ChartMode>("spread");
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 600, height: 240 });
@@ -123,7 +135,7 @@ export function PriceChartBlock({ market, onRemove }: BlockRenderProps) {
   const chartBottom = size.height - padding.bottom;
   const plotWidth = size.width - padding.left - padding.right;
   const occupiedOffset = SLOT_COUNT - Math.max(history.length, 2);
-  const samples = deriveSamples(history);
+  const samples = deriveSamples(history, pnlMode);
 
   let series: RenderSeries[] = [];
   let yTicks: string[] = [];
@@ -219,14 +231,14 @@ export function PriceChartBlock({ market, onRemove }: BlockRenderProps) {
     metricLabel = "Now";
     metricValue = formatUsd(spreadValues[spreadValues.length - 1]);
   } else {
-    const gasValues = samples.map((entry) => entry.gasAdjusted);
-    const domain = createDomain(gasValues);
+    const netValues = samples.map((entry) => entry.netUsd);
+    const domain = createDomain(netValues);
 
     series = [
       {
-        label: "Gas-adjusted",
+        label: pnlMode === "gas-and-fees" ? "Net (gas + fees)" : "Net (gas)",
         swatch: "venue-4",
-        points: gasValues.map((value, index) => ({
+        points: netValues.map((value, index) => ({
           x: xForIndex(index, occupiedOffset, padding.left, plotWidth),
           y: scaleY(value, domain, chartTop, chartBottom),
         })),
@@ -239,13 +251,13 @@ export function PriceChartBlock({ market, onRemove }: BlockRenderProps) {
       formatUsd(domain.min),
     ];
     metricLabel = "Net";
-    metricValue = formatUsd(gasValues[gasValues.length - 1]);
+    metricValue = formatUsd(netValues[netValues.length - 1]);
   }
 
   const eventPoints =
-    mode === "gas"
+    mode === "net"
       ? samples
-          .map((entry, index) => ({ index, value: entry.gasAdjusted }))
+          .map((entry, index) => ({ index, value: entry.netUsd }))
           .filter((entry) => entry.value > 0)
           .map((entry) => ({
             x: xForIndex(entry.index, occupiedOffset, padding.left, plotWidth),
@@ -264,7 +276,7 @@ export function PriceChartBlock({ market, onRemove }: BlockRenderProps) {
     >
       <div className="chart-card">
         <div className="chart-controls">
-          {(["raw", "deviation", "spread", "gas"] as ChartMode[]).map((current) => (
+          {(["raw", "deviation", "spread", "net"] as ChartMode[]).map((current) => (
             <button
               key={current}
               type="button"

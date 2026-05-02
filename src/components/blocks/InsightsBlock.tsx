@@ -23,7 +23,7 @@ const SEVERITY_TONE: Record<
   actionable: "up",
 };
 
-export function InsightsBlock({ market, onRemove }: BlockRenderProps) {
+export function InsightsBlock({ market, pnlMode, onRemove }: BlockRenderProps) {
   const { history } = market;
 
   if (history.length === 0) {
@@ -34,7 +34,7 @@ export function InsightsBlock({ market, onRemove }: BlockRenderProps) {
     );
   }
 
-  const insights = deriveInsightsView(history);
+  const insights = deriveInsightsView(history, pnlMode);
   const signals = insights.secondary.slice(0, 4);
 
   return (

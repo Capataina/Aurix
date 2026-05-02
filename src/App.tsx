@@ -7,6 +7,7 @@ import { usePersistedState } from "./hooks/usePersistedState";
 import { listPairs } from "./features/arbitrage/api";
 import type { PairSummary } from "./features/arbitrage/types";
 import { DEFAULT_PAIR_ID } from "./lib/config";
+import { DEFAULT_PNL_MODE, type PnlMode } from "./lib/arbitrage";
 
 const STALE_AFTER_MS = 8_000;
 
@@ -33,6 +34,10 @@ export default function App() {
   const [pairId, setPairId] = usePersistedState<string>(
     "aurix:pair-id",
     DEFAULT_PAIR_ID,
+  );
+  const [pnlMode, setPnlMode] = usePersistedState<PnlMode>(
+    "aurix:pnl-mode",
+    DEFAULT_PNL_MODE,
   );
   const [pairs, setPairs] = useState<PairSummary[]>([]);
 
@@ -101,6 +106,8 @@ export default function App() {
         pairs={pairs}
         pairId={pairId}
         onSelectPair={setPairId}
+        pnlMode={pnlMode}
+        onSelectPnlMode={setPnlMode}
         intervalMs={intervalMs}
         onSelectInterval={setIntervalMs}
         onRefresh={market.refresh}
@@ -112,6 +119,7 @@ export default function App() {
         {activeTabId === "arbitrage" ? (
           <ArbitragePage
             market={market}
+            pnlMode={pnlMode}
             drawerOpen={drawerOpen}
             onCloseDrawer={() => setDrawerOpen(false)}
           />
