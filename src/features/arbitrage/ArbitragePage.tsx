@@ -1,260 +1,337 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import type { DragEvent } from "react";
+import type { Layout, LayoutItem } from "react-grid-layout";
 
-import { fetchMarketOverview } from "./api";
-import { InsightsPanel } from "./components/InsightsPanel";
-import { MarketChart, type ChartMode } from "./components/MarketChart";
-import { PriceCard } from "./components/PriceCard";
-import { deriveInsightsView } from "./insights";
-import type { MarketOverview, PriceSnapshot } from "./types";
+import { BlockDrawer } from "../../components/shell/BlockDrawer";
+import {
+  COLS,
+  DashboardGrid,
+  type Breakpoint,
+  type ResponsiveLayoutMap,
+} from "../../components/shell/DashboardGrid";
+import {
+  ALL_BLOCKS,
+  getBlockDefinition,
+  type BlockDefinition,
+} from "../../components/blocks/BlockRegistry";
+import type { MarketState } from "../../hooks/useMarketData";
+import { usePersistedState } from "../../hooks/usePersistedState";
 
-const VENUES = [
-  {
-    name: "Uniswap V3 5bps",
-    state: "Active",
-    accent: "dex-accent-sky",
-    summary: "Concentrated-liquidity anchor venue for the main market line.",
-  },
-  {
-    name: "Uniswap V3 30bps",
-    state: "Active",
-    accent: "dex-accent-lilac",
-    summary: "Higher-fee concentrated venue for richer same-DEX spread comparisons.",
-  },
-  {
-    name: "Uniswap V2",
-    state: "Active",
-    accent: "dex-accent-peach",
-    summary: "Reserve-ratio comparison lane sourced from the classic pool model.",
-  },
-  {
-    name: "SushiSwap",
-    state: "Active",
-    accent: "dex-accent-mint",
-    summary: "Second reserve-based venue for visible cross-market divergence.",
-  },
-];
-
-const HISTORY_LIMIT = 100;
-const REFRESH_INTERVAL_MS = 1_000;
-const GAS_UNITS_ESTIMATE = 220_000;
-
-function formatUsd(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(value);
+interface ArbitragePageProps {
+  market: MarketState;
+  drawerOpen: boolean;
+  onCloseDrawer: () => void;
 }
 
-function median(values: number[]): number {
-  const sortedValues = [...values].sort((left, right) => left - right);
-  const midpoint = Math.floor(sortedValues.length / 2);
-
-  if (sortedValues.length % 2 === 0) {
-    return (sortedValues[midpoint - 1] + sortedValues[midpoint]) / 2;
-  }
-
-  return sortedValues[midpoint];
-}
+const TAB_ID = "arbitrage";
+const LAYOUT_STORAGE_KEY = `aurix:layout:${TAB_ID}`;
 
 /**
- * Hosts the first arbitrage analytics screen and coordinates live refreshes.
+ * RGL's internal placeholder sentinel id. RGL hardcodes this in its drop
+ * filtering (`layout.filter(l.i !== droppingItem.i)` before each
+ * onLayoutChange) so we MUST keep `droppingItem.i` set to this string —
+ * otherwise the filter would strip a real block from every layout-change
+ * event and we'd lose blocks on drop.
  */
-export function ArbitragePage() {
-  const [snapshot, setSnapshot] = useState<PriceSnapshot | null>(null);
-  const [overview, setOverview] = useState<MarketOverview | null>(null);
-  const [history, setHistory] = useState<MarketOverview[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [chartMode, setChartMode] = useState<ChartMode>("spread");
-  const [showEvents, setShowEvents] = useState(true);
-  const requestInFlight = useRef(false);
-  const insights = history.length > 0 ? deriveInsightsView(history) : null;
+const DROPPING_ITEM_ID = "__dropping-elem__";
 
-  async function loadSnapshot() {
-    if (requestInFlight.current) {
+const BREAKPOINT_ORDER: Breakpoint[] = ["lg", "md", "sm", "xs"];
+
+/**
+ * Curated default. Three vertical zones across all twelve columns:
+ *   Row 1 (h=4): Live | Spread (h=2) / Gas (h=2) sit above Price Chart |
+ *                Arb matrix
+ *   Row 2 (h=3): Venues under Live; Price Chart fills middle; Volatility
+ *                under Arb matrix
+ *   Row 3 (h=4): Best route | Signals | Ladder
+ *
+ * `Spread` and `Gas-adj` are kept thin (h=2) on purpose — the route
+ * info sits inline with the headline number, so the histograms below
+ * fit comfortably in two rows.
+ */
+const DEFAULT_LAYOUTS: ResponsiveLayoutMap = {
+  lg: [
+    // Top band — hero + small at-a-glance metrics + arb matrix
+    { i: "hero-price", x: 0, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    { i: "spread-tracker", x: 3, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    { i: "gas-opportunity", x: 6, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    { i: "arbitrage-matrix", x: 9, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    // Middle band — chart hero + complementary blocks left/right
+    { i: "price-chart", x: 3, y: 2, w: 6, h: 5, minW: 4, minH: 4 },
+    { i: "venue-grid", x: 0, y: 4, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "volatility", x: 9, y: 4, w: 3, h: 3, minW: 3, minH: 3 },
+    // Bottom band — explicit route + signals + ladder
+    { i: "arb-route", x: 0, y: 7, w: 4, h: 4, minW: 4, minH: 4 },
+    { i: "insights", x: 4, y: 7, w: 5, h: 4, minW: 3, minH: 4 },
+    { i: "price-ladder", x: 9, y: 7, w: 3, h: 4, minW: 3, minH: 3 },
+  ],
+  md: [
+    { i: "hero-price", x: 0, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    { i: "spread-tracker", x: 3, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    { i: "gas-opportunity", x: 6, y: 0, w: 4, h: 2, minW: 3, minH: 2 },
+    { i: "price-chart", x: 3, y: 2, w: 7, h: 5, minW: 4, minH: 4 },
+    { i: "venue-grid", x: 0, y: 4, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "arb-route", x: 0, y: 7, w: 4, h: 4, minW: 4, minH: 4 },
+    { i: "insights", x: 4, y: 7, w: 6, h: 4, minW: 3, minH: 4 },
+    { i: "arbitrage-matrix", x: 0, y: 11, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "volatility", x: 4, y: 11, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "price-ladder", x: 7, y: 11, w: 3, h: 3, minW: 3, minH: 3 },
+  ],
+  sm: [
+    { i: "hero-price", x: 0, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    { i: "arb-route", x: 3, y: 0, w: 3, h: 4, minW: 3, minH: 4 },
+    { i: "price-chart", x: 0, y: 4, w: 6, h: 5, minW: 4, minH: 4 },
+    { i: "venue-grid", x: 0, y: 9, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "price-ladder", x: 3, y: 9, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "spread-tracker", x: 0, y: 12, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "gas-opportunity", x: 3, y: 12, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "arbitrage-matrix", x: 0, y: 15, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "volatility", x: 3, y: 15, w: 3, h: 3, minW: 3, minH: 3 },
+    { i: "insights", x: 0, y: 18, w: 6, h: 4, minW: 3, minH: 4 },
+  ],
+  xs: [
+    { i: "hero-price", x: 0, y: 0, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "arb-route", x: 0, y: 3, w: 4, h: 4, minW: 3, minH: 4 },
+    { i: "price-chart", x: 0, y: 7, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: "venue-grid", x: 0, y: 12, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "spread-tracker", x: 0, y: 15, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "gas-opportunity", x: 0, y: 18, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "arbitrage-matrix", x: 0, y: 21, w: 4, h: 3, minW: 3, minH: 3 },
+    { i: "price-ladder", x: 0, y: 24, w: 4, h: 4, minW: 3, minH: 3 },
+  ],
+};
+
+function activeBlockIdsFromLayouts(layouts: ResponsiveLayoutMap): Set<string> {
+  const ids = new Set<string>();
+  for (const breakpointLayout of Object.values(layouts)) {
+    if (!breakpointLayout) continue;
+    for (const item of breakpointLayout) {
+      if (item.i !== DROPPING_ITEM_ID) {
+        ids.add(item.i);
+      }
+    }
+  }
+  return ids;
+}
+
+function clampPosition(x: number, w: number, cols: number): number {
+  return Math.max(0, Math.min(x, cols - w));
+}
+
+export function ArbitragePage({ market, drawerOpen, onCloseDrawer }: ArbitragePageProps) {
+  const [layouts, setLayouts] = usePersistedState<ResponsiveLayoutMap>(
+    LAYOUT_STORAGE_KEY,
+    DEFAULT_LAYOUTS,
+  );
+  /**
+   * Block definition currently being dragged. Used only to size the
+   * dropping placeholder; the placeholder's id stays the RGL sentinel so
+   * RGL's internal filtering doesn't strip real blocks from layout-change
+   * events.
+   */
+  const [draggedBlock, setDraggedBlock] = useState<BlockDefinition | null>(null);
+
+  const droppingItem = useMemo<LayoutItem>(() => {
+    if (draggedBlock) {
+      return {
+        i: DROPPING_ITEM_ID,
+        w: draggedBlock.defaultW,
+        h: draggedBlock.defaultH,
+        x: 0,
+        y: 0,
+      };
+    }
+    return {
+      i: DROPPING_ITEM_ID,
+      w: 4,
+      h: 3,
+      x: 0,
+      y: 0,
+    };
+  }, [draggedBlock]);
+
+  const activeBlockIds = useMemo(() => activeBlockIdsFromLayouts(layouts), [layouts]);
+
+  const handleDragStart = (
+    block: BlockDefinition,
+    event: DragEvent<HTMLDivElement>,
+  ) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-aurix-block", block.id);
+    setDraggedBlock(block);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedBlock(null);
+  };
+
+  const handleDrop = (
+    _layout: Layout,
+    item: LayoutItem | undefined,
+    event: Event,
+    activeBreakpoint: Breakpoint,
+  ) => {
+    if (!item) {
+      setDraggedBlock(null);
       return;
     }
 
-    requestInFlight.current = true;
-    setLoading(true);
-    setErrorMessage(null);
+    // The placeholder id is the RGL sentinel; the real block id comes from
+    // the dataTransfer payload set in handleDragStart.
+    const dragEvent = event as unknown as DragEvent;
+    const blockId =
+      dragEvent.dataTransfer?.getData("application/x-aurix-block") ?? "";
+    const definition = getBlockDefinition(blockId);
 
-    try {
-      const nextOverview = await fetchMarketOverview();
-      setOverview(nextOverview);
-      setSnapshot(nextOverview.venues[0] ?? null);
-      setHistory((currentHistory) => {
-        const nextHistory = [...currentHistory, nextOverview];
-        return nextHistory.slice(-HISTORY_LIMIT);
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to read market state.";
-      setErrorMessage(message);
-    } finally {
-      requestInFlight.current = false;
-      setLoading(false);
+    if (!definition) {
+      setDraggedBlock(null);
+      return;
     }
-  }
+    if (activeBlockIds.has(definition.id)) {
+      setDraggedBlock(null);
+      return;
+    }
 
-  useEffect(() => {
-    void loadSnapshot();
+    setLayouts((current) => {
+      const next: ResponsiveLayoutMap = {};
+      for (const breakpoint of BREAKPOINT_ORDER) {
+        const existing = (current[breakpoint] ?? []).filter(
+          (entry) => entry.i !== definition.id && entry.i !== DROPPING_ITEM_ID,
+        );
 
-    const intervalId = window.setInterval(() => {
-      void loadSnapshot();
-    }, REFRESH_INTERVAL_MS);
+        const cols = COLS[breakpoint];
+        const widthForBp = Math.min(definition.defaultW, cols);
+        const isActive = breakpoint === activeBreakpoint;
+        const newItem: LayoutItem = {
+          i: definition.id,
+          x: isActive ? clampPosition(item.x, widthForBp, cols) : 0,
+          y: isActive ? item.y : Number.POSITIVE_INFINITY,
+          w: widthForBp,
+          h: definition.defaultH,
+          minW: Math.min(definition.minW, cols),
+          minH: definition.minH,
+        };
 
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
+        next[breakpoint] = [...existing, newItem];
+      }
+      return next;
+    });
+
+    setDraggedBlock(null);
+  };
+
+  /**
+   * Merge incoming layouts with the parent's current state.
+   *
+   * RGL fires `onLayoutChange` immediately after its drop handler runs. At
+   * that moment, RGL's internal layout has been stripped of the placeholder
+   * (via `removeDroppingPlaceholder`) but the new block we just added in
+   * `handleDrop` has only been written to OUR parent state — RGL hasn't
+   * synced from props yet. If we just overwrote with the incoming layout
+   * here, the just-added block would disappear and reappear as RGL re-syncs,
+   * producing the flickering. By preserving items that exist in `current`
+   * but not in `incoming`, we hold onto the new block until RGL catches up
+   * (after which the item is in both, and the merge is a no-op).
+   *
+   * For drag/resize of existing blocks, every block in `current` is also in
+   * `incoming` (RGL doesn't drop items spontaneously), so the preservation
+   * logic is a no-op and the new positions/sizes flow through normally.
+   *
+   * For deletion via the X button, the block is removed from `current`
+   * before RGL fires this callback, so the merge correctly produces a layout
+   * without the deleted block.
+   */
+  const handleLayoutsChange = (incoming: ResponsiveLayoutMap) => {
+    setLayouts((current) => {
+      const next: ResponsiveLayoutMap = {};
+      for (const breakpoint of BREAKPOINT_ORDER) {
+        const incomingForBp = (incoming[breakpoint] ?? []).filter(
+          (item) => item.i !== DROPPING_ITEM_ID,
+        );
+        const currentForBp = current[breakpoint] ?? [];
+
+        const incomingIds = new Set(incomingForBp.map((entry) => entry.i));
+        const preserved = currentForBp.filter(
+          (entry) => entry.i !== DROPPING_ITEM_ID && !incomingIds.has(entry.i),
+        );
+
+        next[breakpoint] = [...incomingForBp, ...preserved];
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveBlock = (blockId: string) => {
+    setLayouts((current) => {
+      const next: ResponsiveLayoutMap = {};
+      for (const breakpoint of BREAKPOINT_ORDER) {
+        const existing = current[breakpoint];
+        if (existing) {
+          next[breakpoint] = existing.filter((item) => item.i !== blockId);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleResetLayout = () => {
+    setLayouts(DEFAULT_LAYOUTS);
+  };
+
+  const liveLayout = layouts.lg ?? [];
+  const visibleBlocks = liveLayout
+    .map((item) => getBlockDefinition(item.i))
+    .filter((definition): definition is BlockDefinition => Boolean(definition));
 
   return (
-    <main className="app-shell">
-      <header className="top-bar">
-        <div>
-          <span className="eyebrow">Local-first DeFi analytics</span>
-          <p className="top-bar-copy">
-            Watch markets as time-series first, then drill into venue detail
-            and exact pricing when you need it.
-          </p>
-        </div>
-
-        <div className="mode-pills">
-          <span className="status-pill status-live">Ethereum mainnet</span>
-          <span className="status-pill status-neutral">WETH / USDC</span>
-          <span className="status-pill status-neutral">1s cadence</span>
-        </div>
-      </header>
-
-      <section className="panel hero-card">
-        <PriceCard
-          snapshot={snapshot}
-          gasPriceGwei={overview?.gasPriceGwei ?? null}
-          loading={loading}
-          errorMessage={errorMessage}
-          onRefresh={loadSnapshot}
-        />
-        <MarketChart
-          history={history}
-          activeLabel={overview?.pairLabel ?? "WETH / USDC"}
-          chartMode={chartMode}
-          onSelectMode={setChartMode}
-          showEvents={showEvents}
-          onToggleEvents={() => setShowEvents((current) => !current)}
-        />
-      </section>
-
-      {insights ? <InsightsPanel insights={insights} /> : null}
-
-      <section className="dashboard-grid">
-        <section className="panel feature-panel">
-          <div className="section-header">
-            <span className="eyebrow">Venue Surface</span>
-            <h2 className="section-title">Venue lanes</h2>
-            <p>
-              Each venue keeps its own lane, accent, and state so the next feeds
-              can join the surface without cluttering it.
-            </p>
+    <>
+      <div className="app-canvas">
+        {visibleBlocks.length === 0 ? (
+          <div className="app-empty">
+            <div className="app-empty-card">
+              <span className="eyebrow">Empty canvas</span>
+              <h2 className="app-empty-title">No blocks placed yet</h2>
+              <p className="app-empty-hint">
+                Open the block library and drag any card onto the canvas. Resize from
+                the bottom-right of each card.
+              </p>
+              <button
+                type="button"
+                className="app-empty-cta"
+                onClick={handleResetLayout}
+              >
+                Restore default layout
+              </button>
+            </div>
           </div>
-
-          <div className="exchange-list">
-            {VENUES.map((exchange) => (
-              <article className="exchange-card" key={exchange.name}>
-                <div className={`exchange-accent ${exchange.accent}`} />
-                <div className="venue-content">
-                  <div className="exchange-header">
-                    <h3>{exchange.name}</h3>
-                    <span className="status-pill status-neutral">
-                      {exchange.state}
-                    </span>
-                  </div>
-                  <p>{exchange.summary}</p>
-                  <div className="venue-meta">
-                    <span className="status-pill status-neutral">
-                      {overview
-                        ? formatUsd(
-                            overview.venues.find(
-                              (venue) => venue.dexName === exchange.name,
-                            )?.priceUsd ?? 0,
-                          )
-                        : "Waiting"}
-                    </span>
-                    <span className="status-pill status-neutral">Live venue</span>
-                  </div>
-                </div>
-              </article>
+        ) : (
+          <DashboardGrid
+            layouts={layouts}
+            onLayoutsChange={handleLayoutsChange}
+            onDrop={handleDrop}
+            droppingItem={droppingItem}
+          >
+            {visibleBlocks.map((block) => (
+              <div key={block.id}>
+                <block.Component
+                  market={market}
+                  onRemove={() => handleRemoveBlock(block.id)}
+                />
+              </div>
             ))}
-          </div>
-        </section>
+          </DashboardGrid>
+        )}
+      </div>
 
-        <section className="panel detail-panel">
-          <div className="section-header">
-            <span className="eyebrow">Market Detail</span>
-            <h2 className="section-title">Current snapshot</h2>
-          </div>
-
-          <dl className="detail-list">
-            <div>
-              <dt>Chain</dt>
-              <dd>{snapshot?.chain ?? "Ethereum Mainnet"}</dd>
-            </div>
-            <div>
-              <dt>Pool</dt>
-              <dd>{snapshot?.poolAddress ?? "Waiting for live read"}</dd>
-            </div>
-            <div>
-              <dt>Venue spread</dt>
-              <dd>
-                {overview
-                  ? (() => {
-                      const prices = overview.venues.map((venue) => venue.priceUsd);
-                      const spread = Math.max(...prices) - Math.min(...prices);
-                      return formatUsd(spread);
-                    })()
-                  : "Waiting for live read"}
-              </dd>
-            </div>
-            <div>
-              <dt>Active venues</dt>
-              <dd>
-                {overview ? overview.venues.map((venue) => venue.dexName).join(", ") : "3"}
-              </dd>
-            </div>
-            <div>
-              <dt>Median price</dt>
-              <dd>
-                {overview
-                  ? formatUsd(median(overview.venues.map((venue) => venue.priceUsd)))
-                  : "Waiting for live read"}
-              </dd>
-            </div>
-            <div>
-              <dt>Net spread est.</dt>
-              <dd>
-                {overview
-                  ? (() => {
-                      const prices = overview.venues.map((venue) => venue.priceUsd);
-                      const medianPrice = median(prices);
-                      const spread = Math.max(...prices) - Math.min(...prices);
-                      const gasCostUsd =
-                        (overview.gasPriceGwei *
-                          GAS_UNITS_ESTIMATE *
-                          medianPrice) /
-                        1_000_000_000;
-                      return formatUsd(spread - gasCostUsd);
-                    })()
-                  : "Waiting for live read"}
-              </dd>
-            </div>
-            <div>
-              <dt>Last source</dt>
-              <dd>{snapshot?.priceSourceLabel ?? "slot0() spot price"}</dd>
-            </div>
-          </dl>
-        </section>
-      </section>
-    </main>
+      <BlockDrawer
+        open={drawerOpen}
+        onClose={onCloseDrawer}
+        blocks={ALL_BLOCKS}
+        activeBlockIds={activeBlockIds}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onResetLayout={handleResetLayout}
+      />
+    </>
   );
 }

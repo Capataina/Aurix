@@ -1,0 +1,115 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* Surfaces */
+  --bg-base: #08090c;
+  --bg-surface: #11131a;
+  --bg-surface-elevated: #181b25;
+  --bg-surface-hover: #1f2330;
+  --bg-overlay: rgba(8, 9, 12, 0.7);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(167, 139, 250, 0.45);
+
+  /* Text */
+  --text-primary: #e8eaf0;
+  --text-secondary: #a0a4b1;
+  --text-muted: #666b7a;
+  --text-disabled: #3f4452;
+
+  /* Brand accent (violet) */
+  --accent: #a78bfa;
+  --accent-hover: #b89dff;
+  --accent-active: #9472f5;
+  --accent-soft: rgba(167, 139, 250, 0.12);
+  --accent-softer: rgba(167, 139, 250, 0.06);
+  --accent-glow: rgba(167, 139, 250, 0.35);
+
+  /* Secondary accent (cyan) */
+  --secondary: #7dd3fc;
+  --secondary-soft: rgba(125, 211, 252, 0.12);
+
+  /* Status */
+  --status-up: #4ade80;
+  --status-up-soft: rgba(74, 222, 128, 0.12);
+  --status-down: #f87171;
+  --status-down-soft: rgba(248, 113, 113, 0.12);
+  --status-warn: #fbbf24;
+  --status-warn-soft: rgba(251, 191, 36, 0.12);
+  --status-live: #4ade80;
+
+  /* Per-venue chart colours — index-based, cycles after 6 */
+  --venue-1: #a78bfa; /* violet */
+  --venue-2: #7dd3fc; /* cyan */
+  --venue-3: #fbbf24; /* amber */
+  --venue-4: #4ade80; /* green */
+  --venue-5: #f472b6; /* pink */
+  --venue-6: #fb923c; /* orange */
+
+  /* Typography */
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+
+  --text-xs: 0.6875rem; /* 11px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-lg: 1rem;       /* 16px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.75rem;   /* 28px */
+  --text-3xl: 2.5rem;    /* 40px */
+
+  --tracking-wide: 0.08em;
+  --tracking-eyebrow: 0.14em;
+  --tracking-tight: -0.02em;
+  --tracking-tighter: -0.03em;
+
+  /* Spacing scale (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 0 1px var(--accent-glow), 0 8px 28px rgba(167, 139, 250, 0.18);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-quick: 120ms;
+  --duration: 180ms;
+  --duration-slow: 280ms;
+
+  /* Layout */
+  --topbar-height: 52px;
+  --drawer-width: 320px;
+
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: var(--text-primary);
+  background: var(--bg-base);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

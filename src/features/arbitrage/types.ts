@@ -17,8 +17,21 @@ export interface PriceSnapshot {
  */
 export interface MarketOverview {
   chain: string;
+  /** Stable pair identifier matching the backend catalog. */
+  pairId: string;
   pairLabel: string;
   fetchedAtUnixMs: number;
   gasPriceGwei: number;
   venues: PriceSnapshot[];
+}
+
+/**
+ * Summary of one registered pair, returned by the backend `list_pairs` command.
+ */
+export interface PairSummary {
+  id: string;
+  label: string;
+  baseSymbol: string;
+  quoteSymbol: string;
+  venueCount: number;
 }

@@ -1,0 +1,91 @@
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+}
+
+.app-main {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+.app-canvas {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-grid-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: var(--space-12) var(--space-6);
+}
+
+.app-empty-card {
+  max-width: 420px;
+  text-align: center;
+  display: grid;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+}
+
+.app-empty-title {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
+}
+
+.app-empty-hint {
+  font-size: var(--text-sm);
+}
+
+.app-empty-cta {
+  margin-top: var(--space-2);
+  justify-self: center;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    background var(--duration) var(--ease-out),
+    color var(--duration) var(--ease-out);
+}
+
+.app-empty-cta:hover {
+  background: rgba(167, 139, 250, 0.18);
+  color: var(--accent-hover);
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.numeric {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}

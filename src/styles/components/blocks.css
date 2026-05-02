@@ -1,0 +1,865 @@
+/* Block-specific styling shared across the catalog */
+
+/* ============================================================
+ * Inline venue dot — used to identify a venue compactly in
+ * subtitles and route lines. Colour follows the venue swatch
+ * rotation so the same colour the chart line / venue tile uses
+ * also appears next to the venue's name in copy.
+ * ============================================================ */
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-right: 5px;
+  box-shadow: 0 0 5px var(--accent);
+  flex-shrink: 0;
+}
+
+.dot.venue-1 { background: var(--venue-1); box-shadow: 0 0 5px var(--venue-1); }
+.dot.venue-2 { background: var(--venue-2); box-shadow: 0 0 5px var(--venue-2); }
+.dot.venue-3 { background: var(--venue-3); box-shadow: 0 0 5px var(--venue-3); }
+.dot.venue-4 { background: var(--venue-4); box-shadow: 0 0 5px var(--venue-4); }
+.dot.venue-5 { background: var(--venue-5); box-shadow: 0 0 5px var(--venue-5); }
+.dot.venue-6 { background: var(--venue-6); box-shadow: 0 0 5px var(--venue-6); }
+
+/* ============================================================
+ * Route row — used by Spread / Gas-adj / ArbRoute blocks to
+ * show "buy here, sell there" with a colour-coded venue dot.
+ * ============================================================ */
+.route-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.route-row-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.route-row-tag.is-up { color: var(--status-up); }
+.route-row-tag.is-down { color: var(--status-down); }
+.route-row-tag.is-warn { color: var(--status-warn); }
+
+.route-row-venue {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.route-row-price {
+  font-feature-settings: "tnum" 1;
+  color: var(--text-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.route-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 0;
+}
+
+.block-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: 100%;
+}
+
+.block-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ============================================================
+ * Hero price
+ * ============================================================ */
+.hero-block {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.hero-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.hero-venue-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero-price-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.hero-price-value {
+  font-family: var(--font-mono);
+  font-size: clamp(1.4rem, 2.4vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tighter);
+  line-height: 1;
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+.hero-spark {
+  height: 100%;
+  min-width: 0;
+  min-height: 32px;
+}
+
+/* ============================================================
+ * Venue grid
+ * ============================================================ */
+.venue-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.venue-tile {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--duration) var(--ease-out), box-shadow var(--duration) var(--ease-out);
+}
+
+.venue-tile-priceline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.venue-tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--venue-color, var(--accent));
+}
+
+.venue-tile.venue-1 { --venue-color: var(--venue-1); }
+.venue-tile.venue-2 { --venue-color: var(--venue-2); }
+.venue-tile.venue-3 { --venue-color: var(--venue-3); }
+.venue-tile.venue-4 { --venue-color: var(--venue-4); }
+.venue-tile.venue-5 { --venue-color: var(--venue-5); }
+.venue-tile.venue-6 { --venue-color: var(--venue-6); }
+
+.venue-tile.is-cheapest {
+  border-color: rgba(74, 222, 128, 0.4);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.18), 0 4px 14px rgba(74, 222, 128, 0.08);
+}
+
+.venue-tile.is-richest {
+  border-color: rgba(248, 113, 113, 0.4);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.16), 0 4px 14px rgba(248, 113, 113, 0.06);
+}
+
+.venue-tile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.venue-tile-name {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.venue-tile-flag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.venue-tile-flag.is-up { color: var(--status-up); }
+.venue-tile-flag.is-down { color: var(--status-down); }
+
+.venue-tile-price {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+  letter-spacing: var(--tracking-tight);
+}
+
+.venue-tile-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+ * Spread tracker
+ * ============================================================ */
+.spread-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.spread-headline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.spread-route {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.spread-route-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.spread-baseline {
+  align-self: flex-end;
+  white-space: nowrap;
+}
+
+/* ============================================================
+ * Gas opportunity
+ * ============================================================ */
+.gas-content {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.gas-headline {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.gas-route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.gas-route-tag {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.gas-route-tag.is-up { color: var(--status-up); }
+.gas-route-tag.is-down { color: var(--status-down); }
+
+.gas-route-arrow {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.gas-trail {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ============================================================
+ * Insights / signals
+ * ============================================================ */
+.insights-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: 100%;
+}
+
+.insight-item {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.insight-item.is-primary {
+  background: linear-gradient(135deg, var(--accent-softer) 0%, var(--bg-surface-elevated) 60%);
+  border-color: var(--border-accent);
+}
+
+.insight-item.is-primary.severity-actionable {
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.08) 0%, var(--bg-surface-elevated) 70%);
+  border-color: rgba(74, 222, 128, 0.32);
+}
+
+.insight-item.is-primary.severity-notable {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, var(--bg-surface-elevated) 70%);
+  border-color: rgba(251, 191, 36, 0.32);
+}
+
+.insight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.insight-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
+}
+
+.insight-metric {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.signals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
+.signal-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 10px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  min-width: 0;
+}
+
+.signal-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signal-glyph {
+  display: inline-flex;
+  align-items: center;
+}
+
+.signal-metric {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+/* ============================================================
+ * Event timeline
+ * ============================================================ */
+.event-timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.event-tl-row {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: var(--space-3);
+  padding: 4px 0;
+}
+
+.event-tl-rail {
+  position: relative;
+  width: 14px;
+}
+
+.event-tl-dot {
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-surface);
+  z-index: 2;
+}
+
+.event-tl-line {
+  position: absolute;
+  top: 14px;
+  left: 6px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--border-subtle);
+}
+
+.event-tl-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  padding: 2px 0;
+}
+
+.event-tl-summary {
+  color: var(--text-secondary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-tl-time {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.event-empty {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+/* ============================================================
+ * Quick stats
+ * ============================================================ */
+.stats-quad {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.stats-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.stats-cell-dial {
+  align-items: center;
+  justify-content: center;
+}
+
+.stats-label {
+  font-size: 10px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stats-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+  letter-spacing: var(--tracking-tight);
+}
+
+.stats-spark {
+  flex: 1;
+  min-height: 16px;
+}
+
+/* ============================================================
+ * Connection
+ * ============================================================ */
+.connection-quad {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  justify-content: space-between;
+}
+
+.conn-row {
+  display: grid;
+  grid-template-columns: 16px auto auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 6px var(--space-2);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.conn-icon {
+  font-size: 14px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.conn-name {
+  font-size: 10px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.conn-glyph {
+  display: inline-flex;
+  align-items: center;
+}
+
+.conn-value {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ============================================================
+ * Price ladder
+ * ============================================================ */
+.ladder-content {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.ladder-stage {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.ladder-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ladder-grid {
+  stroke: rgba(255, 255, 255, 0.04);
+  stroke-width: 0.5;
+}
+
+.ladder-median {
+  stroke: var(--accent);
+  stroke-width: 0.6;
+  stroke-dasharray: 2 2;
+  opacity: 0.6;
+}
+
+.ladder-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ladder-tick {
+  position: absolute;
+  left: 0;
+  font-size: 9px;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.ladder-median-tick {
+  position: absolute;
+  right: 0;
+  font-size: 10px;
+  color: var(--accent);
+  transform: translateY(-50%);
+  font-weight: 600;
+}
+
+.ladder-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ladder-dot {
+  position: absolute;
+  right: 8%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+.ladder-dot-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--venue-color, var(--accent));
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 8px var(--venue-color, var(--accent));
+  flex-shrink: 0;
+}
+
+.ladder-dot.venue-1 { --venue-color: var(--venue-1); }
+.ladder-dot.venue-2 { --venue-color: var(--venue-2); }
+.ladder-dot.venue-3 { --venue-color: var(--venue-3); }
+.ladder-dot.venue-4 { --venue-color: var(--venue-4); }
+.ladder-dot.venue-5 { --venue-color: var(--venue-5); }
+.ladder-dot.venue-6 { --venue-color: var(--venue-6); }
+
+.ladder-dot-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  background: rgba(8, 9, 12, 0.7);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ============================================================
+ * Arb matrix
+ * ============================================================ */
+.arb-matrix-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.arb-matrix-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.arb-matrix-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+ * Heatmap (per-venue / per-tick)
+ * ============================================================ */
+.heatmap-content {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+}
+
+/* ============================================================
+ * Momentum
+ * ============================================================ */
+.momentum-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.momentum-headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.momentum-arrow {
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* ============================================================
+ * Arb route — the "read in one glance" trade summary
+ * ============================================================ */
+.arb-route-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+
+.arb-route-leg {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px var(--space-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.arb-route-leg-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.arb-route-leg-tag.is-up { color: var(--status-up); }
+.arb-route-leg-tag.is-down { color: var(--status-down); }
+
+.arb-route-venue {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.arb-route-price {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.arb-route-math {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.arb-route-math-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.arb-route-math-label {
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.arb-route-math-value {
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+}
+
+.arb-route-math-value.is-up { color: var(--status-up); }
+.arb-route-math-value.is-down { color: var(--status-down); }
+
+.arb-route-math-net {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.arb-route-math-net .arb-route-math-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.arb-route-math-net .arb-route-math-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+/* ============================================================
+ * Volatility
+ * ============================================================ */
+.volatility-content {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  height: 100%;
+}
+
+.volatility-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.volatility-baseline {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.volatility-spark {
+  flex: 1;
+  min-height: 28px;
+}

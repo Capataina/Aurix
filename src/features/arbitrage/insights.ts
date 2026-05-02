@@ -1,6 +1,6 @@
 import type { MarketOverview, PriceSnapshot } from "./types";
+import { GAS_UNITS_ESTIMATE } from "../../lib/config";
 
-const GAS_UNITS_ESTIMATE = 220_000;
 const SHORT_WINDOW = 5;
 const BASELINE_WINDOW = 20;
 const PERSISTENCE_WINDOW = 4;
