@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "aurix",
+  "productName": "Aurix",
   "version": "0.1.0",
   "identifier": "com.ataca.aurix",
   "build": {
@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "aurix",
-        "width": 800,
-        "height": 600
+        "title": "Aurix",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "dragDropEnabled": false
       }
     ],
     "security": {

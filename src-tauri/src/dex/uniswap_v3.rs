@@ -4,61 +4,43 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use thiserror::Error;
 
+use crate::config::{PairConfig, Token};
 use crate::ethereum::client::{EthereumRpcClient, EthereumRpcError};
 use crate::market::types::PriceSnapshot;
 
-const UNISWAP_V3_WETH_USDC_005_POOL: &str = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-const UNISWAP_V3_WETH_USDC_030_POOL: &str = "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8";
 const SLOT0_CALLDATA: &str = "0x3850c7bd";
-const TOKEN0_DECIMALS: u32 = 6;
-const TOKEN1_DECIMALS: u32 = 18;
 
-/// Fetches the current WETH/USDC market state from the canonical Uniswap V3 0.05% pool.
+/// Fetches a price snapshot from a Uniswap V3 pool for the supplied pair.
 ///
-/// Inputs: an Ethereum JSON-RPC client configured for Ethereum mainnet.
-/// Outputs: a normalised price snapshot containing the latest decoded spot price.
-/// Errors: returned when the RPC call fails or the pool response is malformed.
+/// Inputs:
+///   - `rpc_client`: a configured Ethereum JSON-RPC client.
+///   - `pair`: the active pair configuration; supplies tokens (with decimals)
+///     and the human-readable label.
+///   - `dex_name`: stable identifier surfaced as `PriceSnapshot.dex_name`.
+///   - `pool_address`: 20-byte hex address of the V3 pool.
+///   - `fee_tier_bps`: pool fee tier in basis points (5, 30, 100, …).
+///   - `chain_label`: the chain string surfaced on the snapshot.
+/// Outputs: a normalised price snapshot containing the decoded base-in-quote price.
+/// Errors: returned when the RPC call fails, the slot0 payload is malformed,
+/// or the decoded price overflows f64 precision.
 /// Side effects: performs a single read-only `eth_call`.
-pub async fn fetch_weth_usdc_snapshot(
+pub async fn fetch_snapshot(
     rpc_client: &EthereumRpcClient,
-) -> Result<PriceSnapshot, UniswapV3Error> {
-    fetch_pool_snapshot(
-        rpc_client,
-        "Uniswap V3 5bps",
-        UNISWAP_V3_WETH_USDC_005_POOL,
-        5,
-    )
-    .await
-}
-
-/// Fetches the current WETH/USDC market state from the major Uniswap V3 0.30% pool.
-pub async fn fetch_weth_usdc_30bps_snapshot(
-    rpc_client: &EthereumRpcClient,
-) -> Result<PriceSnapshot, UniswapV3Error> {
-    fetch_pool_snapshot(
-        rpc_client,
-        "Uniswap V3 30bps",
-        UNISWAP_V3_WETH_USDC_030_POOL,
-        30,
-    )
-    .await
-}
-
-async fn fetch_pool_snapshot(
-    rpc_client: &EthereumRpcClient,
+    pair: &PairConfig,
     dex_name: &str,
     pool_address: &str,
     fee_tier_bps: u16,
+    chain_label: &str,
 ) -> Result<PriceSnapshot, UniswapV3Error> {
     let slot0_hex = rpc_client.eth_call(pool_address, SLOT0_CALLDATA).await?;
     let sqrt_price_x96 = decode_sqrt_price_x96(&slot0_hex)?;
-    let price_usd = derive_weth_price_usd(&sqrt_price_x96)?;
+    let price_usd = derive_price_base_in_quote(&sqrt_price_x96, &pair.base, &pair.quote)?;
     let fetched_at_unix_ms = current_unix_timestamp_ms()?;
 
     Ok(PriceSnapshot {
-        chain: "Ethereum Mainnet".to_string(),
+        chain: chain_label.to_string(),
         dex_name: dex_name.to_string(),
-        pair_label: "WETH / USDC".to_string(),
+        pair_label: pair.label.clone(),
         price_usd,
         pool_address: pool_address.to_string(),
         fee_tier_bps,
@@ -80,15 +62,58 @@ fn decode_sqrt_price_x96(slot0_hex: &str) -> Result<BigUint, UniswapV3Error> {
     Ok(BigUint::from_bytes_be(&bytes))
 }
 
-fn derive_weth_price_usd(sqrt_price_x96: &BigUint) -> Result<f64, UniswapV3Error> {
-    let numerator: BigUint =
-        (BigUint::from(1u8) << 192) * BigUint::from(10u64).pow(TOKEN1_DECIMALS - TOKEN0_DECIMALS);
-    let denominator: BigUint = sqrt_price_x96.pow(2u32);
+/// Derives the base-in-quote spot price from a Uniswap V3 `sqrtPriceX96`.
+///
+/// V3 pools order tokens by ascending hex address: `token0` is whichever of
+/// (base, quote) has the lower address. The raw price encoded by sqrtPriceX96
+/// is `token1` measured in `token0`, in raw integer units.
+///
+/// We compute, in BigUint to preserve the 192-bit shift precision:
+///   * if base == token0: `result = sqrt^2 * 10^(d0 - d1) / 2^192`
+///     (price of token0 expressed in token1, i.e. base in quote)
+///   * if base == token1: `result = 2^192 * 10^(d1 - d0) / sqrt^2`
+///     (price of token1 expressed in token0, i.e. base in quote)
+fn derive_price_base_in_quote(
+    sqrt_price_x96: &BigUint,
+    base: &Token,
+    quote: &Token,
+) -> Result<f64, UniswapV3Error> {
+    let base_is_token0 = base.is_lower_than(quote);
+    let sqrt_squared: BigUint = sqrt_price_x96.pow(2u32);
+    let two_192: BigUint = BigUint::from(1u8) << 192;
 
-    let numerator_f64 = numerator
+    let (token0_decimals, token1_decimals) = if base_is_token0 {
+        (base.decimals as i32, quote.decimals as i32)
+    } else {
+        (quote.decimals as i32, base.decimals as i32)
+    };
+
+    // (raw_numerator, raw_denominator, scaling exponent) before applying the
+    // 10^|exp| factor. The exponent is signed so we route the scale into
+    // either side as needed and avoid pow(0u32).
+    let (raw_numerator, raw_denominator, exponent) = if base_is_token0 {
+        (sqrt_squared, two_192, token0_decimals - token1_decimals)
+    } else {
+        (two_192, sqrt_squared, token1_decimals - token0_decimals)
+    };
+
+    let abs_exp = exponent.unsigned_abs();
+    let scale = if abs_exp == 0 {
+        BigUint::from(1u8)
+    } else {
+        BigUint::from(10u64).pow(abs_exp)
+    };
+
+    let (final_numerator, final_denominator) = if exponent >= 0 {
+        (raw_numerator * scale, raw_denominator)
+    } else {
+        (raw_numerator, raw_denominator * scale)
+    };
+
+    let numerator_f64 = final_numerator
         .to_f64()
         .ok_or(UniswapV3Error::PrecisionOverflow)?;
-    let denominator_f64 = denominator
+    let denominator_f64 = final_denominator
         .to_f64()
         .ok_or(UniswapV3Error::PrecisionOverflow)?;
 
@@ -104,13 +129,13 @@ fn current_unix_timestamp_ms() -> Result<u64, UniswapV3Error> {
         .duration_since(UNIX_EPOCH)
         .map_err(|_| UniswapV3Error::ClockUnavailable)?;
 
-    let milliseconds = duration.as_millis();
-    milliseconds
+    duration
+        .as_millis()
         .try_into()
         .map_err(|_| UniswapV3Error::ClockUnavailable)
 }
 
-/// Errors encountered while reading or decoding the first Uniswap V3 market feed.
+/// Errors encountered while reading or decoding a Uniswap V3 pool slot0 word.
 #[derive(Debug, Error)]
 pub enum UniswapV3Error {
     #[error(transparent)]

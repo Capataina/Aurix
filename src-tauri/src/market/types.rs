@@ -19,6 +19,8 @@ pub struct PriceSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct MarketOverview {
     pub chain: String,
+    /// Stable pair identifier (matches the id in the pair catalog).
+    pub pair_id: String,
     pub pair_label: String,
     pub fetched_at_unix_ms: u64,
     pub gas_price_gwei: f64,

@@ -5,21 +5,21 @@ use thiserror::Error;
 
 static ENVIRONMENT_BOOTSTRAP: Once = Once::new();
 
-/// Application configuration required by the backend.
+/// RPC + transport configuration loaded from process environment.
+///
+/// Inputs/Outputs/Errors/Side effects:
+///   - Inputs: `MAINNET_RPC_URL` (preferred) or `ALCHEMY_API_KEY` from process
+///     environment, optionally read from a `.env` file in the working directory
+///     or the parent directory.
+///   - Outputs: a validated configuration object exposing the resolved RPC URL.
+///   - Errors: returned when neither variable is present.
+///   - Side effects: lazily loads `.env` files exactly once per process.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     ethereum_mainnet_rpc_url: String,
 }
 
 impl AppConfig {
-    /// Loads backend configuration from process environment or local dotenv files.
-    ///
-    /// Inputs: none; reads environment variables from the current process and
-    /// optional `.env` files.
-    /// Outputs: a validated configuration object containing the resolved RPC URL.
-    /// Errors: returned when neither `MAINNET_RPC_URL` nor `ALCHEMY_API_KEY` is
-    /// available.
-    /// Side effects: lazily loads dotenv files once per process.
     pub fn from_environment() -> Result<Self, ConfigError> {
         load_dotenv_files();
 
@@ -46,7 +46,6 @@ impl AppConfig {
         })
     }
 
-    /// Returns the Ethereum mainnet JSON-RPC HTTPS endpoint used for read-only calls.
     pub fn ethereum_mainnet_rpc_url(&self) -> &str {
         &self.ethereum_mainnet_rpc_url
     }
@@ -59,7 +58,6 @@ fn load_dotenv_files() {
     });
 }
 
-/// Configuration failures that prevent the backend from initialising its network client.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("missing required environment variable: {0}")]
