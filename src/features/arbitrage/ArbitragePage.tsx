@@ -18,22 +18,24 @@ interface ArbitragePageProps {
  * defined in `dashboard.css`. Block IDs match the keys in `BLOCK_REGISTRY`;
  * an unknown ID is a no-op and is filtered out at render time.
  *
- * Grouping intent (top → bottom):
- *   1. Hero strip: live price (wide) + glance stats
- *   2. Big chart: full-width price chart
- *   3. Trade reading: best route + auto-derived signals
- *   4. Venue spatial: per-venue grid + venue-tick heatmap
- *   5. Pairwise small metrics: spread / gas-adjusted / momentum
- *   6. Analytical row: volatility / arb matrix / price ladder
- *   7. Footer: events timeline + connection summary
+ * Layout intent: front-load action-information so the first viewport
+ * answers "what's the trade right now?" before any ambient chart space.
+ *
+ *   1. At-a-glance trio: live price · current spread · gas-adjusted P/L
+ *   2. Action duo:       best route + per-venue grid
+ *   3. Reasoning:        auto-derived signals + summary stats
+ *   4. Reference chart:  price chart (full width)
+ *   5. Analytical trio:  momentum · volatility · price ladder
+ *   6. Visual heatmaps:  arb matrix + venue heatmap
+ *   7. Footer:           event timeline + connection summary
  */
 const ARBITRAGE_LAYOUT: Array<{ row: string; ids: string[] }> = [
-  { row: "dashboard-row-2-1", ids: ["hero-price", "quick-stats"] },
+  { row: "dashboard-row-1-1-1", ids: ["hero-price", "spread-tracker", "gas-opportunity"] },
+  { row: "dashboard-row-1-1", ids: ["arb-route", "venue-grid"] },
+  { row: "dashboard-row-2-1", ids: ["insights", "quick-stats"] },
   { row: "dashboard-row-1", ids: ["price-chart"] },
-  { row: "dashboard-row-1-1", ids: ["arb-route", "insights"] },
-  { row: "dashboard-row-1-1", ids: ["venue-grid", "venue-heatmap"] },
-  { row: "dashboard-row-1-1-1", ids: ["spread-tracker", "gas-opportunity", "momentum"] },
-  { row: "dashboard-row-1-1-1", ids: ["volatility", "arbitrage-matrix", "price-ladder"] },
+  { row: "dashboard-row-1-1-1", ids: ["momentum", "volatility", "price-ladder"] },
+  { row: "dashboard-row-1-1", ids: ["arbitrage-matrix", "venue-heatmap"] },
   { row: "dashboard-row-2-1", ids: ["event-log", "connection"] },
 ];
 
