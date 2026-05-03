@@ -3,6 +3,7 @@ mod config;
 mod dex;
 mod ethereum;
 mod market;
+mod math;
 mod storage;
 
 pub use storage::{DbLocation, Storage};
