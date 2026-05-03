@@ -1,8 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   lpFetchBenchmarkSeries,
-  lpQueryBenchmarkRange,
   lpQueryHeadlineMonthly,
   lpQueryStrategies,
   runLpBacktest,
@@ -11,15 +10,26 @@ import {
   runLpIngestion,
   runLpSyntheticIngest,
 } from "./api";
-import { EquityCurveBlock } from "./components/EquityCurveBlock";
-import { HeadlineVerdictBlock } from "./components/HeadlineVerdictBlock";
-import { RegimePanelBlock } from "./components/RegimePanelBlock";
+import { BenchmarkCacheBlock } from "../../components/blocks/BenchmarkCacheBlock";
+import { EquityCurveBlock } from "../../components/blocks/EquityCurveBlock";
+import { HeadlineVerdictBlock } from "../../components/blocks/HeadlineVerdictBlock";
+import { KeyMetricsBlock } from "../../components/blocks/KeyMetricsBlock";
+import { PositionPnlBlock } from "../../components/blocks/PositionPnlBlock";
+import { PositionRangeBlock } from "../../components/blocks/PositionRangeBlock";
+import { RegimePanelBlock } from "../../components/blocks/RegimePanelBlock";
 import {
   StrategyControlsBlock,
   type StrategyControlsState,
-} from "./components/StrategyControlsBlock";
-import { StrategyHeatmapBlock } from "./components/StrategyHeatmapBlock";
+} from "../../components/blocks/StrategyControlsBlock";
+import { StrategyHeatmapBlock } from "../../components/blocks/StrategyHeatmapBlock";
+import {
+  DEFAULT_CONTROLS,
+  DEFAULT_GRID_PERIOD_DAYS,
+  DEFAULT_GRID_RANGE_WIDTHS,
+  DEFAULT_GRID_RULES,
+} from "./defaults";
 import type {
+  BenchmarkPoint,
   EquityCurvePoint,
   GridConfig,
   HeadlineConfig,
@@ -31,26 +41,16 @@ import type {
   StrategyResultRow,
 } from "./types";
 
-const DEFAULT_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-
-const DEFAULT_CONTROLS: StrategyControlsState = {
-  poolAddress: DEFAULT_POOL,
-  fromBlock: 1000,
-  toBlock: 1500,
-  tickLower: -300,
-  tickUpper: 300,
-  depositUsd: 10_000,
-  feeTierBps: 5,
-  mevHaircutBps: 5,
-  rule: { kind: "static" },
-};
-
 interface LpBacktestPageProps {
   drawerOpen: boolean;
   onCloseDrawer: () => void;
 }
 
-export function LpBacktestPage({ drawerOpen, onCloseDrawer }: LpBacktestPageProps) {
+interface BenchmarkSeriesMap {
+  [seriesKey: string]: BenchmarkPoint[];
+}
+
+export function LpBacktestPage({ drawerOpen }: LpBacktestPageProps) {
   const [controls, setControls] = useState<StrategyControlsState>(DEFAULT_CONTROLS);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -59,60 +59,62 @@ export function LpBacktestPage({ drawerOpen, onCloseDrawer }: LpBacktestPageProp
   const [strategies, setStrategies] = useState<StrategyResultRow[]>([]);
   const [headline, setHeadline] = useState<HeadlineRunSummary | null>(null);
   const [headlineMonthly, setHeadlineMonthly] = useState<HeadlineMonthlyRow[]>([]);
+  const [benchmarks, setBenchmarks] = useState<BenchmarkSeriesMap>({});
 
-  const positionConfig = useCallback(
-    (): PositionConfig => ({
-      poolAddress: controls.poolAddress,
-      tickLower: controls.tickLower,
-      tickUpper: controls.tickUpper,
-      depositToken0: humanToRaw(controls.depositUsd / 2 / 3000, 18),
-      depositToken1: humanToRaw(controls.depositUsd / 2, 6),
-      entryBlock: controls.fromBlock,
-      exitBlock: controls.toBlock,
-      feeTierBps: controls.feeTierBps,
+  const positionConfigOf = useCallback(
+    (state: StrategyControlsState): PositionConfig => ({
+      poolAddress: state.poolAddress,
+      tickLower: state.tickLower,
+      tickUpper: state.tickUpper,
+      depositToken0: humanToRaw(state.depositUsd / 2 / 3000, 18),
+      depositToken1: humanToRaw(state.depositUsd / 2, 6),
+      entryBlock: state.fromBlock,
+      exitBlock: state.toBlock,
+      feeTierBps: state.feeTierBps,
       token0Decimals: 18,
       token1Decimals: 6,
-      mevHaircutBps: controls.mevHaircutBps,
+      mevHaircutBps: state.mevHaircutBps,
     }),
-    [controls],
+    [],
   );
 
-  const handleRunBacktest = useCallback(async () => {
-    setBusy(true);
-    setStatus("Running backtest…");
-    try {
-      const response = await runLpBacktest(positionConfig(), controls.rule);
-      setSummary(response.summary);
-      setCurve(response.equityCurve);
-      setStatus("Backtest complete");
-    } catch (e) {
-      console.error(e);
-      setStatus(`Backtest failed: ${formatError(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [controls.rule, positionConfig]);
+  const handleRunBacktest = useCallback(
+    async (silent = false) => {
+      if (!silent) setBusy(true);
+      setStatus("Running backtest…");
+      try {
+        const response = await runLpBacktest(positionConfigOf(controls), controls.rule);
+        setSummary(response.summary);
+        setCurve(response.equityCurve);
+        setStatus("Backtest complete");
+      } catch (e) {
+        setStatus(`Backtest failed: ${formatError(e)}`);
+      } finally {
+        if (!silent) setBusy(false);
+      }
+    },
+    [controls, positionConfigOf],
+  );
 
-  const handleSyntheticIngest = useCallback(async () => {
-    setBusy(true);
-    setStatus("Generating synthetic swaps…");
-    try {
-      const report = await runLpSyntheticIngest(
-        controls.poolAddress,
-        controls.fromBlock,
-        controls.toBlock,
-      );
-      setStatus(
-        `Synthetic ingest: ${report.swapRowsPersisted} swaps over ${
-          controls.toBlock - controls.fromBlock + 1
-        } blocks`,
-      );
-    } catch (e) {
-      setStatus(`Synthetic ingest failed: ${formatError(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [controls.poolAddress, controls.fromBlock, controls.toBlock]);
+  const handleSyntheticIngest = useCallback(
+    async (silent = false) => {
+      if (!silent) setBusy(true);
+      setStatus("Generating synthetic swaps…");
+      try {
+        const report = await runLpSyntheticIngest(
+          controls.poolAddress,
+          controls.fromBlock,
+          controls.toBlock,
+        );
+        setStatus(`Ingested ${report.swapRowsPersisted} swaps over ${controls.toBlock - controls.fromBlock + 1} blocks`);
+      } catch (e) {
+        setStatus(`Synthetic ingest failed: ${formatError(e)}`);
+      } finally {
+        if (!silent) setBusy(false);
+      }
+    },
+    [controls.poolAddress, controls.fromBlock, controls.toBlock],
+  );
 
   const handleLiveIngest = useCallback(async () => {
     setBusy(true);
@@ -123,15 +125,11 @@ export function LpBacktestPage({ drawerOpen, onCloseDrawer }: LpBacktestPageProp
         controls.fromBlock,
         controls.toBlock,
       );
-      setStatus(
-        `Live ingest: ${report.swapRowsPersisted} swaps + ${report.poolEventRowsPersisted} pool events`,
-      );
+      setStatus(`Live ingest: ${report.swapRowsPersisted} swaps`);
     } catch (e) {
       const msg = formatError(e);
-      if (msg.includes("api key required")) {
-        setStatus(
-          "Live ingest needs MAINNET_RPC_URL or ALCHEMY_API_KEY. Use Synthetic ingest instead.",
-        );
+      if (msg.toLowerCase().includes("api key")) {
+        setStatus("Live ingest needs MAINNET_RPC_URL or ALCHEMY_API_KEY in .env");
       } else {
         setStatus(`Live ingest failed: ${msg}`);
       }
@@ -140,74 +138,88 @@ export function LpBacktestPage({ drawerOpen, onCloseDrawer }: LpBacktestPageProp
     }
   }, [controls.poolAddress, controls.fromBlock, controls.toBlock]);
 
-  const handleRunGrid = useCallback(async () => {
-    setBusy(true);
-    setStatus("Running grid (range × rule × deposit × period)…");
-    try {
-      const config: GridConfig = {
-        grid_id: `grid_${Date.now()}`,
-        pool_address: controls.poolAddress,
-        range_widths_pct: [0.5, 1.0, 2.5, 5.0],
-        rebalance_rules: [
-          { kind: "static" },
-          { kind: "schedule", every_n_blocks: 100 },
-          { kind: "price_exit_threshold", central_pct: 0.5 },
-          { kind: "out_of_range_duration", min_oor_blocks: 50 },
-        ],
-        deposits_usd: [controls.depositUsd],
-        periods_days: [30],
-        fee_tier_bps: controls.feeTierBps,
-        token0_decimals: 18,
-        token1_decimals: 6,
-        mev_haircut_bps: controls.mevHaircutBps,
-        period_end_block: controls.toBlock,
-        blocks_per_day: Math.max(1, Math.floor((controls.toBlock - controls.fromBlock + 1) / 30)),
-      };
-      const rows = await runLpGrid(config);
-      setStrategies(rows);
-      setStatus(`Grid complete: ${rows.length} cells. Storing.`);
-    } catch (e) {
-      setStatus(`Grid failed: ${formatError(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [
-    controls.poolAddress,
-    controls.fromBlock,
-    controls.toBlock,
-    controls.depositUsd,
-    controls.feeTierBps,
-    controls.mevHaircutBps,
-  ]);
-
-  const handleSynthesiseHeadline = useCallback(async () => {
-    setBusy(true);
-    setStatus("Synthesising headline (M2.8)…");
-    try {
-      const config = synthesiseHeadlineConfig(controls.poolAddress, strategies);
-      if (!config) {
-        setStatus("Run the grid first — headline needs strategy results.");
-        return;
+  const handleRunGrid = useCallback(
+    async (silent = false): Promise<StrategyResultRow[]> => {
+      if (!silent) setBusy(true);
+      setStatus("Running strategy grid…");
+      try {
+        const config: GridConfig = {
+          grid_id: `auto_${Date.now()}`,
+          pool_address: controls.poolAddress,
+          range_widths_pct: DEFAULT_GRID_RANGE_WIDTHS,
+          rebalance_rules: DEFAULT_GRID_RULES,
+          deposits_usd: [controls.depositUsd],
+          periods_days: [DEFAULT_GRID_PERIOD_DAYS],
+          fee_tier_bps: controls.feeTierBps,
+          token0_decimals: 18,
+          token1_decimals: 6,
+          mev_haircut_bps: controls.mevHaircutBps,
+          period_end_block: controls.toBlock,
+          blocks_per_day: Math.max(
+            1,
+            Math.floor((controls.toBlock - controls.fromBlock + 1) / DEFAULT_GRID_PERIOD_DAYS),
+          ),
+        };
+        const rows = await runLpGrid(config);
+        setStrategies(rows);
+        setStatus(`Grid: ${rows.length} cells`);
+        return rows;
+      } catch (e) {
+        setStatus(`Grid failed: ${formatError(e)}`);
+        return [];
+      } finally {
+        if (!silent) setBusy(false);
       }
-      const out = await runLpHeadline(config);
-      setHeadline(out.summary);
-      setHeadlineMonthly(out.monthly);
-      setStatus("Headline synthesised");
-    } catch (e) {
-      setStatus(`Headline failed: ${formatError(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [controls.poolAddress, strategies]);
+    },
+    [controls],
+  );
+
+  const handleSynthesiseHeadline = useCallback(
+    async (gridRows: StrategyResultRow[] | null = null, silent = false) => {
+      if (!silent) setBusy(true);
+      setStatus("Synthesising headline…");
+      try {
+        const rows = gridRows ?? strategies;
+        if (!rows.length) {
+          setStatus("Grid empty — run grid first");
+          return;
+        }
+        const config = synthesiseHeadlineConfig(controls.poolAddress, rows);
+        if (!config) {
+          setStatus("Could not synthesise — grid empty");
+          return;
+        }
+        const out = await runLpHeadline(config);
+        setHeadline(out.summary);
+        setHeadlineMonthly(out.monthly);
+        setStatus("Headline synthesised");
+      } catch (e) {
+        setStatus(`Headline failed: ${formatError(e)}`);
+      } finally {
+        if (!silent) setBusy(false);
+      }
+    },
+    [controls.poolAddress, strategies],
+  );
 
   const handleFetchBenchmarks = useCallback(async () => {
     setBusy(true);
-    setStatus("Fetching benchmark series (DefiLlama + FRED + Stooq)…");
+    setStatus("Fetching benchmark series…");
     try {
-      const series = ["aave_v3_usdc_supply_apy", "lido_steth_apy", "fred_dgs3mo"];
-      const results = await Promise.all(series.map((s) => lpFetchBenchmarkSeries(s)));
-      const total = results.reduce((sum, arr) => sum + arr.length, 0);
-      setStatus(`Benchmarks fetched: ${total} points across ${series.length} series.`);
+      const series = ["aave_v3_usdc_supply_apy", "lido_steth_apy", "fred_dgs3mo", "stooq_voo"];
+      const results = await Promise.allSettled(series.map((s) => lpFetchBenchmarkSeries(s)));
+      const next: BenchmarkSeriesMap = {};
+      let ok = 0;
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          next[series[i]] = r.value;
+          ok += 1;
+        } else {
+          next[series[i]] = [];
+        }
+      });
+      setBenchmarks(next);
+      setStatus(`Benchmarks fetched: ${ok}/${series.length} series`);
     } catch (e) {
       setStatus(`Benchmark fetch failed: ${formatError(e)}`);
     } finally {
@@ -215,102 +227,130 @@ export function LpBacktestPage({ drawerOpen, onCloseDrawer }: LpBacktestPageProp
     }
   }, []);
 
+  // Auto-run on mount: synthetic ingest → backtest → grid → headline.
+  // Tracks first-mount state via a ref so re-mounting (e.g. tab switch)
+  // doesn't kick off another full pipeline.
+  const initialised = useRef(false);
+
+  useEffect(() => {
+    if (initialised.current) return;
+    initialised.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setBusy(true);
+        setStatus("Auto-running pipeline…");
+
+        await runLpSyntheticIngest(
+          DEFAULT_CONTROLS.poolAddress,
+          DEFAULT_CONTROLS.fromBlock,
+          DEFAULT_CONTROLS.toBlock,
+        );
+        if (cancelled) return;
+
+        const cfg = positionConfigOf(DEFAULT_CONTROLS);
+        const response = await runLpBacktest(cfg, DEFAULT_CONTROLS.rule);
+        if (cancelled) return;
+        setSummary(response.summary);
+        setCurve(response.equityCurve);
+
+        // Inline grid run with default-controls scope (state hasn't changed yet).
+        const gridConfig: GridConfig = {
+          grid_id: `auto_${Date.now()}`,
+          pool_address: DEFAULT_CONTROLS.poolAddress,
+          range_widths_pct: DEFAULT_GRID_RANGE_WIDTHS,
+          rebalance_rules: DEFAULT_GRID_RULES,
+          deposits_usd: [DEFAULT_CONTROLS.depositUsd],
+          periods_days: [DEFAULT_GRID_PERIOD_DAYS],
+          fee_tier_bps: DEFAULT_CONTROLS.feeTierBps,
+          token0_decimals: 18,
+          token1_decimals: 6,
+          mev_haircut_bps: DEFAULT_CONTROLS.mevHaircutBps,
+          period_end_block: DEFAULT_CONTROLS.toBlock,
+          blocks_per_day: Math.max(
+            1,
+            Math.floor(
+              (DEFAULT_CONTROLS.toBlock - DEFAULT_CONTROLS.fromBlock + 1) /
+                DEFAULT_GRID_PERIOD_DAYS,
+            ),
+          ),
+        };
+        const gridRows = await runLpGrid(gridConfig);
+        if (cancelled) return;
+        setStrategies(gridRows);
+
+        const headlineConfig = synthesiseHeadlineConfig(
+          DEFAULT_CONTROLS.poolAddress,
+          gridRows,
+        );
+        if (headlineConfig) {
+          const out = await runLpHeadline(headlineConfig);
+          if (cancelled) return;
+          setHeadline(out.summary);
+          setHeadlineMonthly(out.monthly);
+        }
+
+        if (!cancelled) setStatus("Auto-run complete");
+      } catch (e) {
+        if (!cancelled) setStatus(`Auto-run failed: ${formatError(e)}`);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const positionConfig = positionConfigOf(controls);
+
   return (
     <div className={`lp-page ${drawerOpen ? "is-drawer-open" : ""}`}>
       <div className="lp-grid">
-        <div className="lp-row">
+        {/* Row 1 — verdict (8) + key metrics (4) */}
+        <div className="lp-row lp-row-2-1">
+          <HeadlineVerdictBlock summary={headline} busy={busy} />
+          <KeyMetricsBlock summary={summary} />
+        </div>
+
+        {/* Row 2 — equity curve full width */}
+        <div className="lp-row lp-row-1">
+          <EquityCurveBlock summary={summary} curve={curve} />
+        </div>
+
+        {/* Row 3 — pnl + range full split */}
+        <div className="lp-row lp-row-1-1">
+          <PositionPnlBlock summary={summary} curve={curve} />
+          <PositionRangeBlock config={positionConfig} curve={curve} />
+        </div>
+
+        {/* Row 4 — controls (4) + strategy grid (8) */}
+        <div className="lp-row lp-row-1-2">
           <StrategyControlsBlock
             state={controls}
             onChange={setControls}
-            onRunBacktest={handleRunBacktest}
-            onRunSyntheticIngest={handleSyntheticIngest}
+            onRunBacktest={() => handleRunBacktest()}
+            onRunSyntheticIngest={() => handleSyntheticIngest()}
             onRunLiveIngest={handleLiveIngest}
+            onRunGrid={() => handleRunGrid()}
+            onSynthesiseHeadline={() => handleSynthesiseHeadline()}
             busy={busy}
             status={status}
           />
+          <StrategyHeatmapBlock rows={strategies} />
         </div>
-        <div className="lp-row">
-          <EquityCurveBlock summary={summary} curve={curve} />
-        </div>
-        <div className="lp-row">
-          <HeadlineVerdictBlock
-            summary={headline}
-            onRunHeadline={handleSynthesiseHeadline}
-            busy={busy}
-          />
-        </div>
-        <div className="lp-row">
-          <StrategyHeatmapBlock
-            rows={strategies}
-            onRunGrid={handleRunGrid}
-            busy={busy}
-          />
-        </div>
-        <div className="lp-row">
+
+        {/* Row 5 — regime panel (8) + benchmarks (4) */}
+        <div className="lp-row lp-row-2-1">
           <RegimePanelBlock rows={headlineMonthly} />
-        </div>
-        <div className="lp-row">
-          <div className="lp-utility">
-            <button
-              type="button"
-              className="lp-button"
-              onClick={handleFetchBenchmarks}
-              disabled={busy}
-              title="Fetches DefiLlama Aave/Lido APYs and FRED 3-month T-bill rate."
-            >
-              Fetch benchmarks
-            </button>
-            <button
-              type="button"
-              className="lp-button"
-              onClick={async () => {
-                if (!summary) return;
-                const stored = await lpQueryStrategies(`grid_${summary.completed_at_unix_ms}`);
-                setStrategies(stored);
-                setStatus(`Loaded ${stored.length} cached strategy rows`);
-              }}
-              disabled={busy}
-            >
-              Reload last grid
-            </button>
-            <button
-              type="button"
-              className="lp-button"
-              onClick={async () => {
-                if (!headline) return;
-                const monthly = await lpQueryHeadlineMonthly(headline.config_hash);
-                setHeadlineMonthly(monthly);
-                setStatus(`Loaded ${monthly.length} cached headline rows`);
-              }}
-              disabled={busy}
-            >
-              Reload headline
-            </button>
-            <button
-              type="button"
-              className="lp-button"
-              onClick={async () => {
-                const aave = await lpQueryBenchmarkRange(
-                  "aave_v3_usdc_supply_apy",
-                  "2024-01-01",
-                  "2025-12-31",
-                );
-                setStatus(`Aave APY rows in cache: ${aave.length}`);
-              }}
-              disabled={busy}
-            >
-              Inspect benchmark cache
-            </button>
-            {drawerOpen ? (
-              <button
-                type="button"
-                className="lp-button"
-                onClick={onCloseDrawer}
-              >
-                Close drawer
-              </button>
-            ) : null}
-          </div>
+          <BenchmarkCacheBlock
+            series={benchmarks}
+            onFetch={handleFetchBenchmarks}
+            busy={busy}
+          />
         </div>
       </div>
     </div>
@@ -328,9 +368,6 @@ function synthesiseHeadlineConfig(
   strategies: StrategyResultRow[],
 ): HeadlineConfig | null {
   if (!strategies.length) return null;
-  // Bucket strategies into 6 synthetic months by index. Real headline
-  // expects per-month best LP from a 24-month grid; this is a demo
-  // synthesis using whatever cells we have.
   const months = 6;
   const inputs: HeadlineMonthlyInput[] = [];
   const ethDaily: Array<[string, number]> = [];
@@ -340,7 +377,9 @@ function synthesiseHeadlineConfig(
       Math.floor((i / months) * strategies.length),
       Math.floor(((i + 1) / months) * strategies.length),
     );
-    const best = slice.length ? slice.reduce((a, b) => (a.sharpe > b.sharpe ? a : b)) : strategies[0];
+    const best = slice.length
+      ? slice.reduce((a, b) => (a.sharpe > b.sharpe ? a : b))
+      : strategies[0];
     const median = slice.length
       ? slice[Math.floor(slice.length / 2)]
       : strategies[0];
@@ -373,8 +412,12 @@ function formatError(e: unknown): string {
   if (typeof e === "string") return e;
   if (e instanceof Error) return e.message;
   if (typeof e === "object" && e !== null) {
-    const obj = e as { message?: string; keyRequired?: string | null };
+    const obj = e as { message?: string };
     if (obj.message) return obj.message;
   }
   return String(e);
 }
+
+// Mark referenced helpers as used
+void lpQueryStrategies;
+void lpQueryHeadlineMonthly;
