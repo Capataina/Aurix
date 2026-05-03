@@ -7,6 +7,8 @@ mod ingest;
 mod market;
 mod math;
 mod storage;
+mod strategies;
+mod validation;
 
 pub use storage::{DbLocation, Storage};
 
