@@ -1,48 +1,9 @@
 /* Tab 2 — LP Backtester. Token-driven, coherent with Tab 1's
-   card-grid + primitive idiom. Layout is a 12-column virtual grid using
-   responsive `lp-row-*` modifiers; each card uses Tab 1's card-handle /
-   card-title / card-subtitle conventions. */
-
-/* ─── Page chrome ──────────────────────────────────────────────── */
-
-.lp-page {
-  width: 100%;
-  height: 100%;
-  padding: var(--space-4);
-  overflow-y: auto;
-}
-
-.lp-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-.lp-row {
-  display: grid;
-  gap: var(--space-4);
-  align-items: stretch;
-}
-
-.lp-row > * {
-  min-width: 0;
-}
-
-.lp-row-1 { grid-template-columns: 1fr; }
-.lp-row-1-1 { grid-template-columns: 1fr 1fr; }
-.lp-row-1-2 { grid-template-columns: minmax(280px, 1fr) 2fr; }
-.lp-row-2-1 { grid-template-columns: 2fr 1fr; }
-
-@media (max-width: 1100px) {
-  .lp-row-1-1,
-  .lp-row-1-2,
-  .lp-row-2-1 {
-    grid-template-columns: 1fr;
-  }
-}
+   card-grid + primitive idiom. Layout primitives (.dashboard-page,
+   .dashboard-grid, .dashboard-row, .dashboard-row-*) live in
+   ./dashboard.css and are shared with Tab 1.
+   Block-internal styling (.lp-card-empty, .verdict-stack, etc) stays
+   here since these classes are only used inside LP-specific blocks. */
 
 .lp-card-empty {
   display: flex;

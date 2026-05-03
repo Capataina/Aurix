@@ -27,7 +27,6 @@ function deriveConnectionStatus(
 
 export default function App() {
   const [activeTabId, setActiveTabId] = useState("arbitrage");
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [intervalMs, setIntervalMs] = usePersistedState<RefreshIntervalMs>(
     "aurix:refresh-interval",
     1000,
@@ -71,22 +70,6 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    function handleKey(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
-        event.preventDefault();
-        setDrawerOpen((open) => !open);
-        return;
-      }
-      if (event.key === "Escape") {
-        setDrawerOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, []);
-
   const lastTickMs = market.overview?.fetchedAtUnixMs ?? null;
   const connectionStatus = deriveConnectionStatus(
     intervalMs,
@@ -112,23 +95,13 @@ export default function App() {
         intervalMs={intervalMs}
         onSelectInterval={setIntervalMs}
         onRefresh={market.refresh}
-        onToggleDrawer={() => setDrawerOpen((open) => !open)}
-        drawerOpen={drawerOpen}
       />
 
       <main className="app-main">
         {activeTabId === "arbitrage" ? (
-          <ArbitragePage
-            market={market}
-            pnlMode={pnlMode}
-            drawerOpen={drawerOpen}
-            onCloseDrawer={() => setDrawerOpen(false)}
-          />
+          <ArbitragePage market={market} pnlMode={pnlMode} />
         ) : activeTabId === "lp-backtester" ? (
-          <LpBacktestPage
-            drawerOpen={drawerOpen}
-            onCloseDrawer={() => setDrawerOpen(false)}
-          />
+          <LpBacktestPage />
         ) : null}
       </main>
     </div>

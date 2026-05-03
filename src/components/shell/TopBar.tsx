@@ -1,4 +1,4 @@
-import { PanelRightIcon, RefreshIcon } from "../primitives/Icon";
+import { RefreshIcon } from "../primitives/Icon";
 import type { RefreshIntervalMs } from "../../hooks/useMarketData";
 import type { PairSummary } from "../../features/arbitrage/types";
 import type { PnlMode } from "../../lib/arbitrage";
@@ -18,8 +18,6 @@ interface TopBarProps {
   intervalMs: RefreshIntervalMs;
   onSelectInterval: (interval: RefreshIntervalMs) => void;
   onRefresh: () => void;
-  onToggleDrawer: () => void;
-  drawerOpen: boolean;
 }
 
 interface TabDef {
@@ -68,8 +66,6 @@ export function TopBar({
   intervalMs,
   onSelectInterval,
   onRefresh,
-  onToggleDrawer,
-  drawerOpen,
 }: TopBarProps) {
   const poolFeesActive = pnlMode === "gas-and-fees";
 
@@ -183,19 +179,6 @@ export function TopBar({
           title="Refresh now"
         >
           <RefreshIcon className="topbar-button-icon" />
-        </button>
-
-        <TopBarDivider />
-
-        <button
-          type="button"
-          className={`topbar-button ${drawerOpen ? "is-primary" : ""}`}
-          onClick={onToggleDrawer}
-          aria-label="Toggle block library"
-          aria-expanded={drawerOpen}
-        >
-          <PanelRightIcon className="topbar-button-icon" />
-          Blocks
         </button>
       </div>
     </header>

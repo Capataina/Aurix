@@ -41,16 +41,11 @@ import type {
   StrategyResultRow,
 } from "./types";
 
-interface LpBacktestPageProps {
-  drawerOpen: boolean;
-  onCloseDrawer: () => void;
-}
-
 interface BenchmarkSeriesMap {
   [seriesKey: string]: BenchmarkPoint[];
 }
 
-export function LpBacktestPage({ drawerOpen }: LpBacktestPageProps) {
+export function LpBacktestPage() {
   const [controls, setControls] = useState<StrategyControlsState>(DEFAULT_CONTROLS);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -308,27 +303,27 @@ export function LpBacktestPage({ drawerOpen }: LpBacktestPageProps) {
   const positionConfig = positionConfigOf(controls);
 
   return (
-    <div className={`lp-page ${drawerOpen ? "is-drawer-open" : ""}`}>
-      <div className="lp-grid">
+    <div className="dashboard-page">
+      <div className="dashboard-grid">
         {/* Row 1 — verdict (8) + key metrics (4) */}
-        <div className="lp-row lp-row-2-1">
+        <div className="dashboard-row dashboard-row-2-1">
           <HeadlineVerdictBlock summary={headline} busy={busy} />
           <KeyMetricsBlock summary={summary} />
         </div>
 
         {/* Row 2 — equity curve full width */}
-        <div className="lp-row lp-row-1">
+        <div className="dashboard-row dashboard-row-1">
           <EquityCurveBlock summary={summary} curve={curve} />
         </div>
 
         {/* Row 3 — pnl + range full split */}
-        <div className="lp-row lp-row-1-1">
+        <div className="dashboard-row dashboard-row-1-1">
           <PositionPnlBlock summary={summary} curve={curve} />
           <PositionRangeBlock config={positionConfig} curve={curve} />
         </div>
 
         {/* Row 4 — controls (4) + strategy grid (8) */}
-        <div className="lp-row lp-row-1-2">
+        <div className="dashboard-row dashboard-row-1-2">
           <StrategyControlsBlock
             state={controls}
             onChange={setControls}
@@ -344,7 +339,7 @@ export function LpBacktestPage({ drawerOpen }: LpBacktestPageProps) {
         </div>
 
         {/* Row 5 — regime panel (8) + benchmarks (4) */}
-        <div className="lp-row lp-row-2-1">
+        <div className="dashboard-row dashboard-row-2-1">
           <RegimePanelBlock rows={headlineMonthly} />
           <BenchmarkCacheBlock
             series={benchmarks}

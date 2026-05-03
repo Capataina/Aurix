@@ -32,7 +32,10 @@ import { VolatilityBlock } from "./VolatilityBlock";
 export interface BlockRenderProps {
   market: MarketState;
   pnlMode: PnlMode;
-  onRemove: () => void;
+  /** When provided, the Card renders an X button that calls this. Tab 1's
+   *  static stacked layout passes nothing; legacy RGL-style consumers that
+   *  want per-block dismiss can still pass it. */
+  onRemove?: () => void;
 }
 
 export interface BlockDefinition {
