@@ -1,8 +1,10 @@
 mod backtest;
+mod benchmarks;
 mod commands;
 mod config;
 mod dex;
 mod ethereum;
+mod headline;
 mod ingest;
 mod market;
 mod math;
