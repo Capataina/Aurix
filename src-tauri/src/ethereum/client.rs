@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use thiserror::Error;
 
 /// Lightweight JSON-RPC client for read-only Ethereum calls.
@@ -103,6 +103,49 @@ impl EthereumRpcClient {
 
         Ok(gas_price_wei as f64 / 1_000_000_000.0)
     }
+
+    /// Generic JSON-RPC call returning a `serde_json::Value`. Used for
+    /// methods whose result is not a plain hex string — `eth_getLogs`
+    /// (array), `eth_getBlockByNumber` (object), etc.
+    ///
+    /// Inputs: the method name and the params value (already shaped as
+    /// the RPC expects).
+    /// Outputs: the parsed `result` field as a `Value`.
+    /// Errors: returned when the transport fails or the RPC server reports an error.
+    /// Side effects: performs a network request.
+    pub async fn rpc_call(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, EthereumRpcError> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params,
+        });
+        let response: RpcResponseGeneric = self
+            .http_client
+            .post(&self.rpc_url)
+            .json(&payload)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if let Some(error) = response.error {
+            return Err(EthereumRpcError::Rpc(error.message));
+        }
+        response
+            .result
+            .ok_or(EthereumRpcError::MissingResultField)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RpcResponseGeneric {
+    result: Option<Value>,
+    error: Option<RpcErrorPayload>,
 }
 
 #[derive(Debug, Deserialize)]

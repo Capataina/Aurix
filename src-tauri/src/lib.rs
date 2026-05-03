@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod dex;
 mod ethereum;
+mod ingest;
 mod market;
 mod math;
 mod storage;
