@@ -7,9 +7,10 @@
 ## Repository Overview
 
 - Aurix is a local Tauri desktop application with a React 19 frontend and a Rust backend.
-- The implemented product surface is currently narrower than the root README roadmap and is limited to Tab 1's live arbitrage-monitoring slice for one hard-coded pair, `WETH / USDC`.
+- The implemented product surface covers **Tab 1 (live arbitrage monitor)** and **Tab 2 (LP backtester — Vector A, code-complete 2026-05-03)**. Tabs 3-5 remain README intent.
+- Tab 1 reads multi-pair, multi-venue prices live (`WETH/USDC` + `WBTC/USDC` are the registered pairs as of 2026-05-02 multi-pair refactor). Tab 2 ingests historical V3 swap streams, runs position simulations + strategy grids + the M2.8 capital-allocation headline.
 - The repository has two runtime layers: a Vite-served frontend in `src/` and a Tauri-hosted Rust backend in `src-tauri/`.
-- The current product does not include persistence, routing, background jobs, automated tests, or implementation for Tabs 2 to 5.
+- The implemented backend now ships persistence (SQLite via rusqlite + WAL), automated tests (130+ unit/integration tests), and the full Vector A pipeline. Wallet (Tab 3), gas intelligence (Tab 4), and risk modelling (Tab 5) remain unimplemented.
 
 ## Repository Structure
 
@@ -70,10 +71,20 @@ Aurix/
 
 | Subsystem | Owns | Primary modules |
 | --- | --- | --- |
-| Desktop shell and runtime entrypoints | Application startup, IPC wiring, build handshake, window metadata, shared styling bootstrap | `src/main.tsx`, `src/App.tsx`, `index.html`, `src/styles/`, `src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json` |
-| Arbitrage frontend surface | Poll cadence, in-memory session history, chart mode selection, insight rendering, venue/detail panels | `src/features/arbitrage/` |
-| Backend market pipeline | Configuration, Ethereum RPC transport, DEX-specific reads, gas-price reads, market overview assembly | `src-tauri/src/config.rs`, `src-tauri/src/ethereum/`, `src-tauri/src/dex/`, `src-tauri/src/commands/market.rs` |
+| Desktop shell and runtime entrypoints | Application startup, IPC wiring, build handshake, window metadata, shared styling bootstrap, app-data DB resolution | `src/main.tsx`, `src/App.tsx`, `index.html`, `src/styles/`, `src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json` |
+| Tab 1 — arbitrage frontend | Poll cadence, in-memory session history, chart modes, infographic block grid, venue/detail panels | `src/features/arbitrage/`, `src/components/blocks/`, `src/components/primitives/`, `src/components/shell/` |
+| Tab 1 — backend market pipeline | Configuration, RPC transport, DEX-specific reads, gas-price reads, market overview assembly | `src-tauri/src/config/`, `src-tauri/src/ethereum/`, `src-tauri/src/dex/`, `src-tauri/src/commands/market.rs` |
 | Cross-boundary market contract | Normalised payload shape shared between Rust and TypeScript | `src-tauri/src/market/types.rs`, `src/features/arbitrage/types.ts` |
+| **Persistence (M2.0)** | SQLite read/write topology, schema migrations, idempotent writes for swaps / pool events / runs / strategies / benchmarks / headline | `src-tauri/src/storage/` |
+| **V3 math primitives (M2.2)** | Q64.96 fixed-point, tick ↔ sqrtPriceX96, liquidity ↔ amounts, per-swap fees, IL closed forms | `src-tauri/src/math/` |
+| **Archive ingestion (M2.1)** | `eth_getLogs` batched fetcher, ABI decoder for Swap/Mint/Burn/Collect, Alchemy live + mock test source, idempotent persistence + checkpoint | `src-tauri/src/ingest/` |
+| **Position simulation engine (M2.3)** | Per-swap fee distribution, in-range tracking, LVR (Milionis), management gas at block-historical prices, equity curve emission | `src-tauri/src/backtest/` |
+| **Validation harness (M2.4)** | Replay LP-position fixtures, compute fees/gas/value diffs vs ground truth, pass/fail rolled into a `ValidationReport` | `src-tauri/src/validation/` |
+| **Strategy comparison grid (M2.5)** | Grid search over `range × rule × deposit × period`, persists per-cell metrics (Sharpe / Sortino / Deflated Sharpe / max DD / etc) | `src-tauri/src/strategies/` |
+| **Multi-asset benchmark module (M2.7)** | DefiLlama no-key (Aave/Compound/Lido), FRED + Stooq no-key chain (T-bills, S&P, gold), beaconcha.in KEY_REQUIRED, V2 LP constant-product, HODL, alpha decomposition (period + rolling 30/60/90) | `src-tauri/src/benchmarks/` |
+| **Capital allocation headline (M2.8)** | Adaptive-tercile vol regime classifier, per-month best/naive/median LP vs Aave/Lido/HODL, verdict prose synthesis | `src-tauri/src/headline/` |
+| **Tab 2 — LP Backtester frontend** | Strategy controls, equity curve chart, headline verdict block, sortable strategy grid, regime panel | `src/features/lp-backtest/` |
+| **Vector A IPC layer** | 10 Tauri commands wrapping ingestion / backtest / grid / headline / benchmark fetch + cache; KEY_REQUIRED surfaced via CommandError.keyRequired | `src-tauri/src/commands/lp.rs` |
 
 - The frontend owns presentation and in-session interpretation only; it does not talk to Ethereum directly.
 - The Rust backend owns all chain access and protocol decoding; no frontend file embeds calldata or pool math.

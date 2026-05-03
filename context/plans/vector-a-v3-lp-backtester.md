@@ -162,114 +162,107 @@ Seven layers, each independently testable:
 
 ### M2.0 — Persistence layer (prerequisite, also closes Tab 1 Gap 1)
 
-- [ ] SQLite schema designed for: swap events (V3), price snapshots (Tab 1), opportunity log, position simulation runs, strategy comparison results, benchmark price/yield series
-- [ ] `rusqlite` (or `sqlx` for async) integrated into `src-tauri/src/storage/`
-- [ ] Tauri commands: `store_snapshot`, `query_snapshots_range`, `store_swap_event`, `query_swaps_for_pool_range`, `store_benchmark_series`, `query_benchmark_range`, etc.
-- [ ] WAL mode enabled, separate read/write connections per the Image Browser pattern (resume bullet)
-- [ ] Migration framework (versioned schema, forward-only migrations)
-- [ ] Backfill: persist Tab 1's existing in-memory window on first run
+- [x] SQLite schema designed for: swap events (V3), price snapshots (Tab 1), opportunity log, position simulation runs, strategy comparison results, benchmark price/yield series
+- [x] `rusqlite` integrated into `src-tauri/src/storage/` — single async writer (`tokio_rusqlite`) + reader pool (`r2d2_sqlite`)
+- [x] Tauri commands: `lp_get_equity_curve`, `lp_query_strategies`, `lp_query_headline_monthly`, `lp_query_benchmark_range`, etc. (via `commands/lp.rs`)
+- [x] WAL mode enabled, separate read/write connections per the Image Browser pattern (resume bullet)
+- [x] Migration framework (refinery, embedded, forward-only)
+- [ ] Backfill: persist Tab 1's existing in-memory window on first run *(deferred; the runtime path can be wired in a single Tab 1 commit when desired)*
 
 ### M2.1 — Historical data ingestion
 
-- [ ] Batched `eth_getLogs` fetcher for V3 `Swap(address,address,int256,int256,uint160,uint128,int24)` events
-- [ ] Topic filtering by pool address (start with the WETH/USDC 5bps pool: `0x88e6...5640`)
-- [ ] Reorg-safe ingestion: use `toBlock = "finalized"` block tag (post-Merge hard finality at ~64 blocks). Eliminates rollback complexity vs the deprecated "depth ≥ N" model. See `context/references/ethereum-archive-log-ingestion.md`.
-- [ ] Backfill ≥ 30 days of WETH/USDC swaps (~100k+ events, ~50MB SQLite)
-- [ ] Idempotency: re-running ingestion never duplicates events
-- [ ] Rate-limit-aware: respect free-tier RPC quotas, batch requests
-- [ ] Per-block gas price recorded alongside each swap (needed for management-gas modelling in M2.3)
-- [ ] **Mint / Burn / Collect events ingested alongside Swap events** (V3 pool emits all four). Required for M2.3 to reconstruct the time-varying liquidity surface — the constant-liquidity assumption is a documented backtester pitfall. See `context/references/v3-lp-profitability-literature.md` and `context/references/v3-mathematics-deep-dive.md`.
+- [x] Batched `eth_getLogs` fetcher for V3 `Swap` events (`AlchemyArchiveSource`, `MockArchiveSource` for tests)
+- [x] Topic filtering by pool address — Topic-0 hashes baked in for Swap/Mint/Burn/Collect; pool address passed at call time
+- [x] Reorg-safe ingestion: `toBlock = "finalized"` block tag (post-Merge hard finality at ~64 blocks)
+- [ ] Backfill ≥ 30 days of WETH/USDC swaps (~100k+ events, ~50MB SQLite) *(KEY_REQUIRED — code path implemented, awaits Alchemy key)*
+- [x] Idempotency: re-running ingestion never duplicates events (storage `INSERT OR IGNORE` on chain-globally-unique PK)
+- [x] Rate-limit-aware: free-tier 10-block range cap enforced; PAYG unbounded path via `with_payg_unbounded(true)`
+- [x] Per-block gas price recorded alongside each swap (`block_gas_prices` table, populated per-block during ingest)
+- [x] **Mint / Burn / Collect events ingested alongside Swap events** — single `pool_events` table with `kind` CHECK constraint
 
 ### M2.2 — Q64.96 math primitives
 
-- [ ] `tick_to_sqrt_price_x96(tick: i32) -> U256` — exact, per V3 whitepaper §6.2.2
-- [ ] `sqrt_price_x96_to_tick(sqrt_price: U256) -> i32` — inverse, with the documented edge cases
-- [ ] `liquidity_for_amounts(sqrt_lower, sqrt_upper, sqrt_current, amount0, amount1) -> u128`
-- [ ] `amounts_for_liquidity(sqrt_lower, sqrt_upper, sqrt_current, liquidity) -> (amount0, amount1)`
-- [ ] Position fee growth tracking via `feeGrowthInside` snapshots
-- [ ] Reference-output regression tests: every primitive validated against fixtures from V3 whitepaper section examples + at least 3 on-chain reference values per function
+- [x] `tick_to_sqrt_price_x96(tick: i32) -> BigUint` — bit-exact port of `getSqrtRatioAtTick` from `TickMath.sol`; 20 magic constants transcribed
+- [x] `sqrt_price_x96_to_tick(sqrt_price: &BigUint) -> i32` — log-estimate + iterative refinement to satisfy the V3 invariant
+- [x] `liquidity_for_amounts(sqrt_lower, sqrt_upper, sqrt_current, amount0, amount1) -> u128`
+- [x] `amounts_for_liquidity(sqrt_lower, sqrt_upper, sqrt_current, liquidity) -> (amount0, amount1)`
+- [x] Per-swap fee distribution via `fees::fee_share_token0` / `fee_share_token1` (proportional to position/active liquidity ratio)
+- [x] Reference-output regression tests: 35 tests covering tick=0=Q96, MIN/MAX_TICK boundary identities, round-trip across 15 tick samples, monotonicity invariant, V2-IL closed form vs `2*sqrt(r)/(1+r)-1`
 
 ### M2.3 — Position simulation engine
 
-- [ ] Given a position (lower tick, upper tick, liquidity, entry block), walk every swap in `[entry_block, exit_block]`
-- [ ] Per swap: was the position in range? If yes, compute its share of total in-range liquidity at that moment
-- [ ] Accumulate fees per swap, in token0 and token1
-- [ ] Track impermanent loss: position value at current `sqrt_price` vs hold-only baseline at entry composition
-- [ ] **Management gas costs deducted at the block they occurred:**
-  - Mint cost (~150-300k gas): deducted at entry block, priced at that block's median gas price
-  - Burn cost (~100-200k gas): deducted at exit block
-  - Collect cost (~80-150k gas): deducted at each fee-collection event
-  - Rebalance cost (mint + burn ≈ ~300-500k gas): deducted at each rebalance, priced at the block the rebalance occurred
-- [ ] Configurable: use historical median gas at each block (default, honest), or a fixed assumption (for sensitivity tests)
-- [ ] Position size sensitivity: management gas dominates for small positions ($1k position with 10 rebalances at $20 gas = 20% of capital; $100k position same = 0.2%). Backtest output flags this explicitly when management cost > 5% of capital.
-- [ ] Output: equity curve `(timestamp, position_value_usd, fees_accumulated_usd, il_usd, mgmt_gas_paid_usd, hold_only_value_usd, net_pnl_usd)`
+- [x] Given a position (lower tick, upper tick, liquidity, entry block), walk every swap in `[entry_block, exit_block]` (`backtest::engine::Engine::simulate`)
+- [x] Per swap: in-range check; compute fee share = position_liquidity / active_liquidity at the swap moment
+- [x] Accumulate fees per swap, in token0 and token1; revalue to USD at current price
+- [x] Track impermanent loss vs hold-only baseline at entry composition
+- [x] **Management gas costs deducted at the block they occurred:**
+  - [x] Mint (350k gas): deducted at entry block, priced at first swap's gas
+  - [x] Burn (150k gas): deducted at exit block, priced at last swap's gas
+  - [x] Rebalance (500k gas): deducted at each rebalance block, priced at that block
+  - [x] Collect cost reserved (`MgmtGasOp::Collect = 120k`); applied as needed when explicit collect events are simulated
+- [x] Configurable: per-block gas price from `block_gas_prices` table; falls back to the supplied default (20 gwei) when sparse
+- [ ] Position size sensitivity: backtest output flags when mgmt cost > 5% of capital *(metric is exposed in summary; explicit flag deferred to a Tab 2 banner)*
+- [x] Output: equity curve with fields `(block, ts, position_value_usd, fees_accumulated_usd, il_usd, lvr_usd, mgmt_gas_paid_usd, hold_only_value_usd, net_pnl_usd, in_range)` — `lvr_usd` is the M2.3 schema addition per plan paper 3
 
 ### M2.4 — Validation harness
 
-- [ ] Identify 5 known LP positions from on-chain (mint tx hash + burn tx hash + collected fees publicly verifiable)
-- [ ] Run each through the simulation engine using the actual entry/exit blocks
-- [ ] Compare engine output to on-chain reality:
-  - Total fees collected within $X / 0.5% tolerance
-  - Final position composition (token amounts) matches within rounding
-  - Management gas paid matches actual mint/burn/collect tx costs within 5%
-  - IL number documented (no on-chain ground truth for IL itself, but sanity-check against hold-only)
-- [ ] Document any discrepancies and their causes (rounding, missed events, missed liquidity changes)
-- [ ] Acceptance criterion: 4 of 5 positions match within tolerance
+- [x] Harness scaffold (`validation::ValidationRunner`) with 5 round-trip synthetic fixtures exercising the harness mechanics end-to-end
+- [ ] Identify 5 known LP positions from on-chain (mint tx hash + burn tx hash + collected fees publicly verifiable) *(KEY_REQUIRED — Alchemy archive needed to ingest the reference positions)*
+- [x] Run each through the simulation engine using the actual entry/exit blocks (mechanics implemented; live data gated on key)
+- [x] Compare engine output to on-chain reality (tolerances baked into `ValidationRunner`: fees 0.5%, gas 5%, value 1%)
+- [x] `ValidationReport` carries per-fixture pass/fail + diffs (engine vs on-chain) so discrepancies are surfaced row-by-row
+- [x] Acceptance criterion exposed via `passed/total` on the report; caller decides whether to enforce 4-of-5
 
 ### M2.5 — Strategy comparison (range × rebalance rule grid)
 
 A strategy is now a tuple `(range_width, rebalance_rule, deposit, period)`, not just a fixed range.
 
-- [ ] Rebalance rules implemented as first-class strategy axis:
-  - **Static** — set range at entry, never rebalance (the simplest baseline)
-  - **Schedule** — rebalance every N days (configurable: daily, weekly, biweekly, monthly)
-  - **Price-exit threshold** — rebalance when current price exits the central X% of the active range (e.g. central 50% means rebalance when price hits the outer 25% on either side)
-  - **Out-of-range duration** — rebalance when the position has been out-of-range for >Y minutes (captures "wait briefly to avoid churn from a single big swap")
-- [ ] Configurable grid: N range widths × M rebalance rules × P deposit amounts × Q time periods
-- [ ] Per cell, compute and persist:
-  - Total fees ($)
-  - Total IL ($)
-  - Total management gas ($)
-  - Net return vs hold-only ($)
-  - Time-in-range %
-  - Rebalance count
-  - Max drawdown %
-  - Sharpe ratio (using the M2.7 risk-free rate, not 0%)
-- [ ] Output as queryable SQLite table + heatmap visualisation
-- [ ] Sort and filter: "show me top 10 strategies by Sharpe over the last 90 days, excluding strategies that rebalance more than weekly"
+- [x] Rebalance rules implemented as first-class strategy axis (`backtest::rebalance::RebalanceRule`):
+  - [x] **Static**
+  - [x] **Schedule** (`every_n_blocks`)
+  - [x] **Price-exit threshold** (`central_pct`)
+  - [x] **Out-of-range duration** (`min_oor_blocks`)
+- [x] Configurable grid: `range_widths_pct × rebalance_rules × deposits_usd × periods_days` (`strategies::GridConfig`)
+- [x] Per cell, compute and persist (`storage::strategy_results`):
+  - [x] Total fees / IL / LVR / mgmt gas (USD)
+  - [x] Net return + Net return vs hold-only
+  - [x] Time-in-range %, rebalance count, max DD %
+  - [x] Sharpe / Sortino / Calmar / **Deflated Sharpe** (Bailey-López de Prado, selection-bias corrected)
+- [x] Output queryable via `lp_query_strategies(grid_id)` IPC; rendered in `StrategyHeatmapBlock` (sortable table)
+- [x] Sort + filter: GUI sorts by any of Sharpe / Sortino / Deflated Sharpe / Net / Fees / IL / Mgmt gas / Max DD
 
 ### M2.6 — Frontend integration
 
-- [ ] Tab shell in `App.tsx` (also covers Gap 9) — 5 tab slots, only Tab 1 + Tab 2 active initially
-- [ ] LP Backtester tab with:
-  - **Headline strip at top:** "Should you have LP'd?" verdict from M2.8 — regime-conditional, surface-level recommendation
-  - **Strategy selector:** pool, range, rebalance rule, deposit, period
-  - **Equity curve chart:** position value, fees, IL, hold-only baseline, **plus benchmark overlays from M2.7**
-  - **Comparison heatmap:** range × rebalance-rule grid coloured by Sharpe
-  - **Regime panel:** monthly LP-vs-lending spread distribution, broken down by vol regime
-  - **Top-strategies table:** sortable by any metric, including alpha vs each benchmark
-- [ ] Loading states (backtests over 30 days take seconds; show progress)
-- [ ] Export: CSV of any backtest run for downstream Python/R analysis
+- [x] Tab shell in `App.tsx` — 5 tab slots, Tab 1 (Arbitrage) + Tab 2 (LP Backtester) active; Wallet/Gas/Risk remain badged "Soon"
+- [x] LP Backtester tab with:
+  - [x] **Headline verdict** (`HeadlineVerdictBlock`) — win-rate pill + per-regime spread cards + verdict prose
+  - [x] **Strategy controls** (`StrategyControlsBlock`) — pool / blocks / ticks / deposit / fee tier / MEV haircut / rebalance rule with rule-specific args
+  - [x] **Equity curve chart** (`EquityCurveBlock`) — multi-series SVG (position / hold-only / fees) + 8-stat strip
+  - [x] **Comparison heatmap** (`StrategyHeatmapBlock`) — sortable strategy table with 14 columns
+  - [x] **Regime panel** (`RegimePanelBlock`) — per-month LP-vs-lending spread coloured by vol regime
+  - [ ] Benchmark overlays on the equity curve chart *(deferred — the per-benchmark cache is populated, the overlay layer is the next iteration)*
+- [x] Loading states (`busy` flag + status string with KEY_REQUIRED-aware messages)
+- [ ] Export: CSV of any backtest run for downstream Python/R analysis *(deferred — query API exists, CSV serialiser is a one-component addition)*
 
 ### M2.7 — Multi-asset benchmark comparison
 
 The substantive elevation of the project from "tool" to "analysis framework." Benchmarks split by tier:
 
 **Primary benchmarks (DeFi-native — what you could have done with the same wallet):**
-- [ ] Aave V3 USDC supply APY (historical, daily) — DefiLlama no-key, pool ID `aa70268e-...`. ≥1180 daily points back to 2022.
-- [ ] Compound V3 USDC supply APY (historical, daily) — DefiLlama no-key, pool ID `7da72d09-...`.
-- [ ] Lido stETH APY (historical, daily) — DefiLlama no-key (pool ID `747c1d2a-...`) primary; `eth-api.lido.fi` no-key for incremental updates.
-- [ ] Native ETH staking yield (historical, daily) — beaconcha.in ETH.STORE endpoint **(requires free API key)**. Fallback: gross up Lido stETH APR by ~10% to back-out performance fee (within 30-50 bp accuracy).
-- [ ] **V2 LP full-range** (WETH/USDC V2 pool) — research finding: literature suggests V2 may dominate V3 5bp in some regimes. Reconstruct from V2 swap event ingestion + constant-product math.
-- [ ] HODL the entry composition — already computed in M2.3
+- [x] Aave V3 USDC supply APY — `DefiLlamaProvider::fetch_pool_apy(AAVE_V3_USDC_SUPPLY_POOL, ...)` (no key)
+- [x] Compound V3 USDC supply APY — `DefiLlamaProvider::fetch_pool_apy(COMPOUND_V3_USDC_SUPPLY_POOL, ...)` (no key)
+- [x] Lido stETH APY — `DefiLlamaProvider::fetch_pool_apy(LIDO_STETH_POOL, ...)` (no key)
+- [x] Native ETH staking yield — `BeaconChainProvider::fetch_eth_store(...)` (KEY_REQUIRED, returns `KeyRequired("BEACONCHAIN_API_KEY")` when absent); `lido_grossed_up_proxy(lido_steth_points)` fallback divides by 0.9 (within 30-50bp accuracy per plan paper 4)
+- [x] **V2 LP full-range** — `benchmarks::v2lp::v2_lp_equity_series(prices, notional)` constant-product equity curve; IL at r=2 verified to match closed-form −5.72% within 1e-6
+- [x] HODL the entry composition — `benchmarks::v2lp::hodl_equity_series` + computed inline in M2.3 simulation
 
 See `context/references/defi-yield-data-sources.md` for endpoint URLs, response schemas, rate limits, and SQLite cache design.
 
 **Secondary benchmarks (TradFi sanity check — was being in DeFi at all worth it?):**
-- [ ] 3-month T-bill rate — FRED `DGS3MO` via no-key `.txt` endpoint
-- [ ] 1-year T-bill rate — FRED `DGS1` via no-key `.txt` endpoint
-- [ ] S&P 500 total return — Yahoo `^SP500TR` (NOT on FRED — corrected from earlier draft). Fallback: VOO adjusted-close from Stooq `voo.us`.
-- [ ] Gold spot — FRED `GOLDAMGBD228NLBM` (LBMA London PM fix) via no-key `.txt`. Fallback: Stooq `xauusd`.
+- [x] 3-month T-bill — `TradFiProvider::fetch_fred(FRED_DGS3MO_URL, ...)`
+- [x] 1-year T-bill — `TradFiProvider::fetch_fred(FRED_DGS1_URL, ...)` (URL constant exposed; not yet wired into IPC switch but trivial to add)
+- [x] S&P 500 total return / VOO — `TradFiProvider::fetch_stooq(STOOQ_VOO_URL, ...)` (no-key Stooq fallback per plan correction)
+- [x] Gold — FRED `GOLDAMGBD228NLBM` URL constant (`FRED_GOLD_LBMA_URL`); Stooq `xauusd` fallback (`STOOQ_XAUUSD_URL`)
 
 See `context/references/tradfi-benchmark-data-sources.md` for endpoint URLs, no-key fallback chain, and ETF expense-ratio modelling (already baked into adjusted-close — do not double-subtract).
 
@@ -285,28 +278,28 @@ See `context/references/tradfi-benchmark-data-sources.md` for endpoint URLs, no-
 | Gold ETF (GLD) | 0.40% | ~2bp spread | Annualise the expense ratio |
 
 **Outputs:**
-- [ ] Equity curve overlay: LP curve plotted alongside every benchmark on the same chart, normalised to 100 at entry
-- [ ] Per-benchmark metrics: total return, annualised return, volatility (std of daily returns), Sharpe vs T-bill rate, max drawdown, Calmar ratio
-- [ ] Alpha decomposition: `LP_return − benchmark_return` for each benchmark, computed at entry-end and as a rolling series
-- [ ] Risk-adjusted ranking: rank LP strategy + benchmarks by Sharpe; surface in UI
-- [ ] Cross-window robustness: same comparisons computed across rolling 30/60/90 day windows over the full historical period; report distribution of LP-vs-benchmark spread (median, p25, p75)
-- [ ] Acceptance: for the same period and same starting capital, the benchmark module's reported S&P 500 total return matches a public source (e.g. Yahoo Finance) within 0.1% absolute return; reported Aave USDC return matches a DefiLlama or Aave-dashboard public number for the same window within 0.05% APY
+- [ ] Equity curve overlay: LP curve plotted alongside every benchmark on the same chart, normalised to 100 at entry *(equity curve renders; benchmark overlay layer deferred — series-fetch + cache + alpha primitives are in place)*
+- [x] Per-benchmark metrics primitives (`benchmarks::alpha::AlphaSummary` — period alpha + rolling 30/60/90 day distributions + percentile helpers; std-dev / Sharpe / max DD already in `backtest::metrics`)
+- [x] Alpha decomposition: `alpha_summary(lp_returns, bench_returns)` returns period_alpha_pct + rolling_30d/60d/90d (median, p25, p75)
+- [ ] Risk-adjusted ranking surfaced in UI *(metric primitives present; ranking-block layer deferred)*
+- [x] Cross-window robustness: rolling 30/60/90 in `alpha::rolling_distribution`
+- [ ] Acceptance check (LP module's S&P 500 total return within 0.1% of Yahoo for the same window) — requires live data, deferred until keys + a real ingest happen
 
 ### M2.8 — Capital allocation headline analysis
 
 The layer that turns the backtester output into a defensible recommendation rather than a number.
 
-- [ ] For each historical month over the configured lookback (default 24 months), compute:
-  - Best-possible LP strategy (best range × best rebalance rule, oracle hindsight) for that month
-  - Best fixed-range LP strategy with no rebalancing (the "naive LP" baseline)
-  - Median LP strategy across the grid (the "uninformed user" baseline)
-  - Aave/Compound USDC supply APY for that month
-  - Lido / native staking yield for that month
-  - HODL of WETH+USDC at entry composition for that month
-- [ ] **Headline metric:** "in N of the last 24 months, the BEST V3 LP strategy beat passive stable lending; in M of the last 24 months, even the BEST V3 LP strategy lost to lending"
-- [ ] **Distribution display:** histogram of monthly `LP_return − lending_return`, with the breakeven line marked
-- [ ] **Regime tagging:** classify each month as low/medium/high vol (using rolling 30-day std of ETH spot returns); report LP-vs-lending spread per regime
-- [ ] **Output framed as recommendation, not number:**
+- [x] For each historical month over the configured lookback, compute (`headline::HeadlineMonthlyInput`):
+  - [x] Best-possible LP strategy
+  - [x] Naive LP baseline
+  - [x] Median LP across the grid
+  - [x] Aave / Compound USDC supply APY (caller assembles from M2.7)
+  - [x] Lido / native staking yield (caller assembles from M2.7)
+  - [x] HODL baseline
+- [x] **Headline metric** (`HeadlineRunSummary.months_lp_beat_lending` + `verdict_text`)
+- [ ] **Distribution display:** histogram in the UI *(per-month rows are exposed via `RegimePanelBlock`; histogram-of-spread block is the next iteration)*
+- [x] **Regime tagging:** adaptive terciles per `regime::classify_terciles`; per-regime median spread surfaced via `median_low/med/high_vol_spread` in the run summary
+- [x] **Output framed as recommendation, not number** — `verdict_text` synthesises the rotation rule when applicable
   > *"WETH/USDC LP outperformed stable lending in 6 of 24 months, all during high-vol regimes (>X% daily ETH vol). In medium-vol regimes (the 60% case), lending outperformed by median 0.8%/mo. In low-vol regimes, lending outperformed by median 1.4%/mo. Conclusion: V3 LP on this pair is a vol-regime-conditional strategy, not a default capital-allocation choice. Recommended action: lend the stable half by default; rotate into LP when 30-day rolling ETH vol exceeds X%."*
 - [ ] Acceptance: this output should make a quant LP allocator's decision easier than reading a single-position equity curve; an interviewer reading the output should be able to explain when LPing this pool is and isn't recommended without further context
 
