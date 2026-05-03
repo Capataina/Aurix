@@ -63,6 +63,7 @@ pub fn run() {
             commands::lp::lp_query_headline_monthly,
             commands::lp::lp_fetch_benchmark_series,
             commands::lp::lp_query_benchmark_range,
+            commands::lp::lp_get_chain_head,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

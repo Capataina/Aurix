@@ -36,6 +36,12 @@ pub struct SwapEventRow {
 impl Storage {
     /// Bulk-inserts swap events inside a single transaction. Returns the
     /// number of rows actually written (skipping duplicates).
+    ///
+    /// `pool_address` is normalised to lowercase before storage so it is
+    /// trivially comparable against query parameters. Live Alchemy logs
+    /// arrive lowercase by chain convention; synthetic / test sources
+    /// may produce mixed case (the user's EIP-55 checksummed input).
+    /// Both must agree at the DB level.
     pub async fn insert_swap_events_batch(
         &self,
         events: Vec<SwapEventRow>,
@@ -54,8 +60,9 @@ impl Storage {
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                     )?;
                     for e in events.iter() {
+                        let pool_lower = e.pool_address.to_lowercase();
                         let rows = stmt.execute(params![
-                            e.pool_address,
+                            pool_lower,
                             e.block_number,
                             e.log_index,
                             e.transaction_hash,

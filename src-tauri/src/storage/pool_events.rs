@@ -73,8 +73,11 @@ impl Storage {
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                     )?;
                     for e in events.iter() {
+                        // Normalise to lowercase so synthetic/test inputs
+                        // match the lowercase-everywhere read path.
+                        let pool_lower = e.pool_address.to_lowercase();
                         let rows = stmt.execute(params![
-                            e.pool_address,
+                            pool_lower,
                             e.block_number,
                             e.log_index,
                             e.transaction_hash,

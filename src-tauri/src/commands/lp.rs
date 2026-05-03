@@ -61,6 +61,24 @@ fn map_ingest_error(e: IngestError) -> CommandError {
     }
 }
 
+/// Returns the latest finalized block on Ethereum mainnet. Used by the
+/// frontend to default the LP backtester's block window to "the last N
+/// blocks" instead of an arbitrary fixed range. Free of cost — just one
+/// `eth_getBlockByNumber("finalized")` call.
+///
+/// Errors with `KeyRequired` when no Alchemy/RPC key is configured;
+/// the frontend handles that by falling back to its own default window.
+#[allow(dead_code)] // referenced via tauri::generate_handler! macro
+#[tauri::command]
+pub async fn lp_get_chain_head() -> Result<u64, CommandError> {
+    let source =
+        AlchemyArchiveSource::from_environment().map_err(map_ingest_error)?;
+    source
+        .latest_finalized_block()
+        .await
+        .map_err(map_ingest_error)
+}
+
 /// Backfills the supplied block range for a pool. Uses the Alchemy
 /// archive source if a key is configured, otherwise falls back to the
 /// mock source and reports `KeyRequired`.

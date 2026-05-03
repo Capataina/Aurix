@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   lpFetchBenchmarkSeries,
+  lpGetChainHead,
   lpQueryHeadlineMonthly,
   lpQueryStrategies,
   runLpBacktest,
@@ -222,9 +223,9 @@ export function LpBacktestPage() {
     }
   }, []);
 
-  // Auto-run on mount: synthetic ingest → backtest → grid → headline.
-  // Tracks first-mount state via a ref so re-mounting (e.g. tab switch)
-  // doesn't kick off another full pipeline.
+  // Auto-run on mount: chain-head fetch → synthetic ingest → backtest →
+  // grid → headline. Tracks first-mount state via a ref so re-mounting
+  // (e.g. tab switch) doesn't kick off another full pipeline.
   const initialised = useRef(false);
 
   useEffect(() => {
@@ -235,38 +236,63 @@ export function LpBacktestPage() {
     (async () => {
       try {
         setBusy(true);
-        setStatus("Auto-running pipeline…");
+        setStatus("Resolving recent block window…");
 
+        // Default the block window to "the last 1000 blocks of the
+        // chain". The synthetic ingest then generates fake swaps over
+        // that range — block numbers feel current and the same window
+        // is reusable for live ingest later. Falls back to the static
+        // DEFAULT_CONTROLS window when no Alchemy key is configured.
+        let toBlock = DEFAULT_CONTROLS.toBlock;
+        let fromBlock = DEFAULT_CONTROLS.fromBlock;
+        try {
+          const head = await lpGetChainHead();
+          if (typeof head === "number" && head > 1000) {
+            toBlock = head;
+            fromBlock = head - 1000;
+          }
+        } catch {
+          /* No key / RPC unreachable — quietly use the static default. */
+        }
+        if (cancelled) return;
+
+        const resolvedControls = {
+          ...DEFAULT_CONTROLS,
+          fromBlock,
+          toBlock,
+        };
+        setControls(resolvedControls);
+
+        setStatus("Auto-running pipeline…");
         await runLpSyntheticIngest(
-          DEFAULT_CONTROLS.poolAddress,
-          DEFAULT_CONTROLS.fromBlock,
-          DEFAULT_CONTROLS.toBlock,
+          resolvedControls.poolAddress,
+          resolvedControls.fromBlock,
+          resolvedControls.toBlock,
         );
         if (cancelled) return;
 
-        const cfg = positionConfigOf(DEFAULT_CONTROLS);
-        const response = await runLpBacktest(cfg, DEFAULT_CONTROLS.rule);
+        const cfg = positionConfigOf(resolvedControls);
+        const response = await runLpBacktest(cfg, resolvedControls.rule);
         if (cancelled) return;
         setSummary(response.summary);
         setCurve(response.equityCurve);
 
-        // Inline grid run with default-controls scope (state hasn't changed yet).
         const gridConfig: GridConfig = {
           grid_id: `auto_${Date.now()}`,
-          pool_address: DEFAULT_CONTROLS.poolAddress,
+          pool_address: resolvedControls.poolAddress,
           range_widths_pct: DEFAULT_GRID_RANGE_WIDTHS,
           rebalance_rules: DEFAULT_GRID_RULES,
-          deposits_usd: [DEFAULT_CONTROLS.depositUsd],
+          deposits_usd: [resolvedControls.depositUsd],
           periods_days: [DEFAULT_GRID_PERIOD_DAYS],
-          fee_tier_bps: DEFAULT_CONTROLS.feeTierBps,
+          fee_tier_bps: resolvedControls.feeTierBps,
           token0_decimals: 18,
           token1_decimals: 6,
-          mev_haircut_bps: DEFAULT_CONTROLS.mevHaircutBps,
-          period_end_block: DEFAULT_CONTROLS.toBlock,
+          mev_haircut_bps: resolvedControls.mevHaircutBps,
+          period_end_block: resolvedControls.toBlock,
           blocks_per_day: Math.max(
             1,
             Math.floor(
-              (DEFAULT_CONTROLS.toBlock - DEFAULT_CONTROLS.fromBlock + 1) /
+              (resolvedControls.toBlock - resolvedControls.fromBlock + 1) /
                 DEFAULT_GRID_PERIOD_DAYS,
             ),
           ),
@@ -276,7 +302,7 @@ export function LpBacktestPage() {
         setStrategies(gridRows);
 
         const headlineConfig = synthesiseHeadlineConfig(
-          DEFAULT_CONTROLS.poolAddress,
+          resolvedControls.poolAddress,
           gridRows,
         );
         if (headlineConfig) {

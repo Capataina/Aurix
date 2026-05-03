@@ -13,6 +13,16 @@ import type {
   StrategyResultRow,
 } from "./types";
 
+/**
+ * Returns the latest finalized block on Ethereum mainnet via Alchemy.
+ * Used to default the LP backtester's block window to a "last N blocks"
+ * rolling range. Throws `KeyRequired` when no key is configured —
+ * caller falls back to a static default in that case.
+ */
+export function lpGetChainHead(): Promise<number> {
+  return invoke<number>("lp_get_chain_head");
+}
+
 /** Live archive ingestion via Alchemy (KEY_REQUIRED). */
 export function runLpIngestion(
   poolAddress: string,
