@@ -1,6 +1,6 @@
-import { Card } from "../primitives/Card";
-import { Dial } from "../primitives/Dial";
-import type { PositionRunSummary } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Dial } from "../../primitives/Dial";
+import type { PositionRunSummary } from "../../../features/lp-backtest/types";
 
 interface KeyMetricsBlockProps {
   summary: PositionRunSummary | null;

@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::backtest::{Engine, PositionConfig, RebalanceRule};
-use crate::math::tick::{sqrt_price_x96_to_tick, tick_to_sqrt_price_x96};
+use crate::math::tick::sqrt_price_x96_to_tick;
 use crate::backtest::price::sqrt_price_x96_to_human_price;
 use crate::backtest::metrics::deflated_sharpe;
 use crate::storage::strategy::StrategyResultRow;

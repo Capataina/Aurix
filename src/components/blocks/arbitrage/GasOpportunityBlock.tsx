@@ -1,9 +1,9 @@
-import { Card } from "../primitives/Card";
-import { RatioBar } from "../primitives/RatioBar";
-import { Sparkline } from "../primitives/Sparkline";
-import { findBestRoute } from "../../lib/arbitrage";
-import { formatGweiSmart, formatSignedUsd, formatUsd } from "../../lib/format";
-import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { RatioBar } from "../../primitives/RatioBar";
+import { Sparkline } from "../../primitives/Sparkline";
+import { findBestRoute } from "../../../lib/arbitrage";
+import { formatGweiSmart, formatSignedUsd, formatUsd } from "../../../lib/format";
+import { shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 export function GasOpportunityBlock({ market, pnlMode, onRemove }: BlockRenderProps) {

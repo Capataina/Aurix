@@ -1,9 +1,9 @@
-import { Card } from "../primitives/Card";
-import { StatusGlyph } from "../primitives/StatusGlyph";
+import { Card } from "../../primitives/Card";
+import { StatusGlyph } from "../../primitives/StatusGlyph";
 import {
   deriveInsightsView,
   type InsightSeverity,
-} from "../../features/arbitrage/insights";
+} from "../../../features/arbitrage/insights";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 const SEVERITY_LEVEL: Record<InsightSeverity, number> = {

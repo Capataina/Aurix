@@ -2,7 +2,7 @@
 //!
 //! Reference: `vector-a-v3-lp-backtester.md` §M2.8.
 
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub mod error;
 pub mod regime;

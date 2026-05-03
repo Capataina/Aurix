@@ -1,6 +1,6 @@
-import { Card } from "../primitives/Card";
-import { StatusGlyph } from "../primitives/StatusGlyph";
-import { formatGwei, formatRelativeTime } from "../../lib/format";
+import { Card } from "../../primitives/Card";
+import { StatusGlyph } from "../../primitives/StatusGlyph";
+import { formatGwei, formatRelativeTime } from "../../../lib/format";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 function shortAddress(address: string | undefined): string {

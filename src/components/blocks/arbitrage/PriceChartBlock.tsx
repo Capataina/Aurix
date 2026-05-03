@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Card } from "../primitives/Card";
+import { Card } from "../../primitives/Card";
 import {
   formatSignedPercent,
   formatUsd,
-} from "../../lib/format";
-import { findBestRoute } from "../../lib/arbitrage";
-import { SLOT_COUNT } from "../../lib/config";
-import { median } from "../../lib/stats";
-import { venueSwatchByIndex, type SwatchClass } from "../../lib/venues";
-import type { MarketOverview } from "../../features/arbitrage/types";
+} from "../../../lib/format";
+import { findBestRoute } from "../../../lib/arbitrage";
+import { SLOT_COUNT } from "../../../lib/config";
+import { median } from "../../../lib/stats";
+import { venueSwatchByIndex, type SwatchClass } from "../../../lib/venues";
+import type { MarketOverview } from "../../../features/arbitrage/types";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 type ChartMode = "raw" | "deviation" | "spread" | "net";

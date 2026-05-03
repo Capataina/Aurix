@@ -1,6 +1,6 @@
-import { Card } from "../primitives/Card";
-import { RangeIndicator } from "../primitives/RangeIndicator";
-import type { EquityCurvePoint, PositionConfig } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { RangeIndicator } from "../../primitives/RangeIndicator";
+import type { EquityCurvePoint, PositionConfig } from "../../../features/lp-backtest/types";
 
 interface PositionRangeBlockProps {
   config: PositionConfig | null;

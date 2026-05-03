@@ -1,8 +1,8 @@
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import { Sparkline } from "../primitives/Sparkline";
-import { formatSignedPercent, formatUsd } from "../../lib/format";
-import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import { Sparkline } from "../../primitives/Sparkline";
+import { formatSignedPercent, formatUsd } from "../../../lib/format";
+import { shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 export function HeroPriceBlock({ market, onRemove }: BlockRenderProps) {

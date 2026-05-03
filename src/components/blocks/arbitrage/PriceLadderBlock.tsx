@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { formatUsd } from "../../lib/format";
-import { median } from "../../lib/stats";
-import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { formatUsd } from "../../../lib/format";
+import { median } from "../../../lib/stats";
+import { shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 /**

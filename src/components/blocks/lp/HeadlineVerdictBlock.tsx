@@ -1,8 +1,8 @@
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import { RatioBar } from "../primitives/RatioBar";
-import { StatusGlyph } from "../primitives/StatusGlyph";
-import type { HeadlineRunSummary } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import { RatioBar } from "../../primitives/RatioBar";
+import { StatusGlyph } from "../../primitives/StatusGlyph";
+import type { HeadlineRunSummary } from "../../../features/lp-backtest/types";
 
 interface HeadlineVerdictBlockProps {
   summary: HeadlineRunSummary | null;

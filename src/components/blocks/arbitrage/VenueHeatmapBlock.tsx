@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { Heatmap } from "../primitives/Heatmap";
-import { median } from "../../lib/stats";
-import { shortenVenueName } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { Heatmap } from "../../primitives/Heatmap";
+import { median } from "../../../lib/stats";
+import { shortenVenueName } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 const MAX_COLS = 60;

@@ -1,9 +1,9 @@
-import { Card } from "../primitives/Card";
-import { Heatmap } from "../primitives/Heatmap";
-import { computeGasCostUsd, computeRoute } from "../../lib/arbitrage";
-import { formatSignedUsd } from "../../lib/format";
-import { median } from "../../lib/stats";
-import { shortenVenueName } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { Heatmap } from "../../primitives/Heatmap";
+import { computeGasCostUsd, computeRoute } from "../../../lib/arbitrage";
+import { formatSignedUsd } from "../../../lib/format";
+import { median } from "../../../lib/stats";
+import { shortenVenueName } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 /**

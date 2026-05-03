@@ -1,6 +1,6 @@
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import type { HeadlineMonthlyRow } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import type { HeadlineMonthlyRow } from "../../../features/lp-backtest/types";
 
 interface RegimePanelBlockProps {
   rows: HeadlineMonthlyRow[];

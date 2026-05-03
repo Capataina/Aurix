@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 
-import { Card } from "../primitives/Card";
-import { MicroBar } from "../primitives/MicroBar";
-import { Pill } from "../primitives/Pill";
-import { formatPreciseUsd } from "../../lib/format";
-import type { StrategyResultRow } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { MicroBar } from "../../primitives/MicroBar";
+import { Pill } from "../../primitives/Pill";
+import { formatPreciseUsd } from "../../../lib/format";
+import type { StrategyResultRow } from "../../../features/lp-backtest/types";
 
 interface StrategyHeatmapBlockProps {
   rows: StrategyResultRow[];

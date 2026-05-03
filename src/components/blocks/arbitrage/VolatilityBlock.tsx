@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { Dial } from "../primitives/Dial";
-import { Sparkline } from "../primitives/Sparkline";
-import { mean, standardDeviation } from "../../lib/stats";
+import { Card } from "../../primitives/Card";
+import { Dial } from "../../primitives/Dial";
+import { Sparkline } from "../../primitives/Sparkline";
+import { mean, standardDeviation } from "../../../lib/stats";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 const ROLLING_WINDOW = 20;

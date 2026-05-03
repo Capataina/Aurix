@@ -9,9 +9,9 @@ import {
   PriceTagIcon,
   PulseIcon,
   StatsIcon,
-} from "../primitives/Icon";
-import type { MarketState } from "../../hooks/useMarketData";
-import type { PnlMode } from "../../lib/arbitrage";
+} from "../../primitives/Icon";
+import type { MarketState } from "../../../hooks/useMarketData";
+import type { PnlMode } from "../../../lib/arbitrage";
 
 import { ArbitrageMatrixBlock } from "./ArbitrageMatrixBlock";
 import { ArbRouteBlock } from "./ArbRouteBlock";

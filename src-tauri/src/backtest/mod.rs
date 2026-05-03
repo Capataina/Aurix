@@ -3,7 +3,7 @@
 //!
 //! Reference: `context/plans/vector-a-v3-lp-backtester.md` §M2.3 + §M2.5.
 
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub mod engine;
 pub mod error;

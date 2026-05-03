@@ -1,0 +1,7 @@
+# Shared blocks live here.
+#
+# A block belongs in `shared/` if it renders meaningfully on more than
+# one tab without tab-specific prop coupling. Today there are none —
+# Tab 1 and Tab 2 each have distinct data shapes — but when a future
+# block (e.g. a global gas-tracker tile) is consumed by both tabs, it
+# moves here.

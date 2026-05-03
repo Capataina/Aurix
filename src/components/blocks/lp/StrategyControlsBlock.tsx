@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import { RefreshIcon } from "../primitives/Icon";
-import type { RebalanceRule } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import { RefreshIcon } from "../../primitives/Icon";
+import type { RebalanceRule } from "../../../features/lp-backtest/types";
 
 export interface StrategyControlsState {
   poolAddress: string;

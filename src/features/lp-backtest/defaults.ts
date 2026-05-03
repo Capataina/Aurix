@@ -5,7 +5,7 @@
 // -300 and +300 over the supplied block range).
 
 import type { RebalanceRule } from "./types";
-import type { StrategyControlsState } from "../../components/blocks/StrategyControlsBlock";
+import type { StrategyControlsState } from "../../components/blocks/lp/StrategyControlsBlock";
 
 /** Uniswap V3 5bps WETH/USDC pool — the canonical pair we monitor. */
 export const DEFAULT_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";

@@ -1,8 +1,8 @@
-import { Card } from "../primitives/Card";
-import { DeviationBar } from "../primitives/DeviationBar";
-import { formatPreciseUsd, formatSignedPercent } from "../../lib/format";
-import { median } from "../../lib/stats";
-import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { DeviationBar } from "../../primitives/DeviationBar";
+import { formatPreciseUsd, formatSignedPercent } from "../../../lib/format";
+import { median } from "../../../lib/stats";
+import { shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 export function VenueGridBlock({ market, onRemove }: BlockRenderProps) {

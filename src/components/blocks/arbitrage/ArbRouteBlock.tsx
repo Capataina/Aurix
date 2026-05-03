@@ -1,14 +1,14 @@
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import { GAS_UNITS_ESTIMATE } from "../../lib/config";
-import { findBestRoute } from "../../lib/arbitrage";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import { GAS_UNITS_ESTIMATE } from "../../../lib/config";
+import { findBestRoute } from "../../../lib/arbitrage";
 import {
   formatGweiSmart,
   formatPreciseUsd,
   formatSignedUsd,
   formatUsd,
-} from "../../lib/format";
-import { shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+} from "../../../lib/format";
+import { shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 /**

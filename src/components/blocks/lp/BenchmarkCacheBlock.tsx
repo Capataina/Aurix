@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { Sparkline } from "../primitives/Sparkline";
-import { StatusGlyph } from "../primitives/StatusGlyph";
-import type { BenchmarkPoint } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Sparkline } from "../../primitives/Sparkline";
+import { StatusGlyph } from "../../primitives/StatusGlyph";
+import type { BenchmarkPoint } from "../../../features/lp-backtest/types";
 
 interface BenchmarkCacheBlockProps {
   series: Record<string, BenchmarkPoint[]>;

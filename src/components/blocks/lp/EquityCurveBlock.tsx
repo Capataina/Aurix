@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 
-import { Card } from "../primitives/Card";
-import { Pill } from "../primitives/Pill";
-import { formatSignedPercent, formatPreciseUsd } from "../../lib/format";
-import type { EquityCurvePoint, PositionRunSummary } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { Pill } from "../../primitives/Pill";
+import { formatSignedPercent, formatPreciseUsd } from "../../../lib/format";
+import type { EquityCurvePoint, PositionRunSummary } from "../../../features/lp-backtest/types";
 
 interface EquityCurveBlockProps {
   summary: PositionRunSummary | null;

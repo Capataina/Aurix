@@ -1,9 +1,9 @@
-import { Card } from "../primitives/Card";
-import { Histogram } from "../primitives/Histogram";
-import { RangeIndicator } from "../primitives/RangeIndicator";
-import { formatPreciseUsd, formatUsd } from "../../lib/format";
-import { mean, range as rangeStats } from "../../lib/stats";
-import { findExtremes, shortenVenueName, venueSwatchByIndex } from "../../lib/venues";
+import { Card } from "../../primitives/Card";
+import { Histogram } from "../../primitives/Histogram";
+import { RangeIndicator } from "../../primitives/RangeIndicator";
+import { formatPreciseUsd, formatUsd } from "../../../lib/format";
+import { mean, range as rangeStats } from "../../../lib/stats";
+import { findExtremes, shortenVenueName, venueSwatchByIndex } from "../../../lib/venues";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 export function SpreadTrackerBlock({ market, onRemove }: BlockRenderProps) {

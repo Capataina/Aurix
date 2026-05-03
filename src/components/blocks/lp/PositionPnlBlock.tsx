@@ -1,8 +1,8 @@
-import { Card } from "../primitives/Card";
-import { RatioBar } from "../primitives/RatioBar";
-import { Sparkline } from "../primitives/Sparkline";
-import { formatPreciseUsd } from "../../lib/format";
-import type { EquityCurvePoint, PositionRunSummary } from "../../features/lp-backtest/types";
+import { Card } from "../../primitives/Card";
+import { RatioBar } from "../../primitives/RatioBar";
+import { Sparkline } from "../../primitives/Sparkline";
+import { formatPreciseUsd } from "../../../lib/format";
+import type { EquityCurvePoint, PositionRunSummary } from "../../../features/lp-backtest/types";
 
 interface PositionPnlBlockProps {
   summary: PositionRunSummary | null;

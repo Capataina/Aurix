@@ -1,8 +1,8 @@
-import { Card } from "../primitives/Card";
+import { Card } from "../../primitives/Card";
 import {
   deriveInsightsView,
   type InsightSeverity,
-} from "../../features/arbitrage/insights";
+} from "../../../features/arbitrage/insights";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 const SEVERITY_DOT: Record<InsightSeverity, string> = {

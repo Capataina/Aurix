@@ -1,9 +1,9 @@
-import { Card } from "../primitives/Card";
-import { Dial } from "../primitives/Dial";
-import { Sparkline } from "../primitives/Sparkline";
-import { HISTORY_LIMIT } from "../../lib/config";
-import { formatPercent, formatUsd } from "../../lib/format";
-import { median, range as rangeStats, standardDeviation } from "../../lib/stats";
+import { Card } from "../../primitives/Card";
+import { Dial } from "../../primitives/Dial";
+import { Sparkline } from "../../primitives/Sparkline";
+import { HISTORY_LIMIT } from "../../../lib/config";
+import { formatPercent, formatUsd } from "../../../lib/format";
+import { median, range as rangeStats, standardDeviation } from "../../../lib/stats";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 export function QuickStatsBlock({ market, onRemove }: BlockRenderProps) {

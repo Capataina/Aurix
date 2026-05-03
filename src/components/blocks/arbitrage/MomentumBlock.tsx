@@ -1,7 +1,7 @@
-import { Card } from "../primitives/Card";
-import { DeviationBar } from "../primitives/DeviationBar";
-import { Sparkline } from "../primitives/Sparkline";
-import { formatSignedPercent } from "../../lib/format";
+import { Card } from "../../primitives/Card";
+import { DeviationBar } from "../../primitives/DeviationBar";
+import { Sparkline } from "../../primitives/Sparkline";
+import { formatSignedPercent } from "../../../lib/format";
 import type { BlockRenderProps } from "./BlockRegistry";
 
 const SHORT_WINDOW = 10;

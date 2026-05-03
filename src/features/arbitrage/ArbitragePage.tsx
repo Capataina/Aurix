@@ -13,7 +13,7 @@ import {
   ALL_BLOCKS,
   getBlockDefinition,
   type BlockDefinition,
-} from "../../components/blocks/BlockRegistry";
+} from "../../components/blocks/arbitrage/BlockRegistry";
 import type { MarketState } from "../../hooks/useMarketData";
 import { usePersistedState } from "../../hooks/usePersistedState";
 import type { PnlMode } from "../../lib/arbitrage";

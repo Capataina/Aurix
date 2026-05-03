@@ -10,7 +10,7 @@
 // engine), M2.5 (strategies), and M2.7 (V2 LP benchmark). Some primitives
 // (Q160/Q192, mul_div_round_up, fee_share_token1) are part of the
 // canonical V3 surface even when not yet referenced in callsites.
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub mod error;
 pub mod fees;

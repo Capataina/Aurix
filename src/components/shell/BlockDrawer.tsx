@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { DragEvent } from "react";
 
-import type { BlockDefinition } from "../blocks/BlockRegistry";
+import type { BlockDefinition } from "../blocks/arbitrage/BlockRegistry";
 import { CloseIcon, ResetIcon } from "../primitives/Icon";
 
 interface BlockDrawerProps {

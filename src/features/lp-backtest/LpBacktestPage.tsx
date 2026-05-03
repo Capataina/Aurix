@@ -10,18 +10,18 @@ import {
   runLpIngestion,
   runLpSyntheticIngest,
 } from "./api";
-import { BenchmarkCacheBlock } from "../../components/blocks/BenchmarkCacheBlock";
-import { EquityCurveBlock } from "../../components/blocks/EquityCurveBlock";
-import { HeadlineVerdictBlock } from "../../components/blocks/HeadlineVerdictBlock";
-import { KeyMetricsBlock } from "../../components/blocks/KeyMetricsBlock";
-import { PositionPnlBlock } from "../../components/blocks/PositionPnlBlock";
-import { PositionRangeBlock } from "../../components/blocks/PositionRangeBlock";
-import { RegimePanelBlock } from "../../components/blocks/RegimePanelBlock";
+import { BenchmarkCacheBlock } from "../../components/blocks/lp/BenchmarkCacheBlock";
+import { EquityCurveBlock } from "../../components/blocks/lp/EquityCurveBlock";
+import { HeadlineVerdictBlock } from "../../components/blocks/lp/HeadlineVerdictBlock";
+import { KeyMetricsBlock } from "../../components/blocks/lp/KeyMetricsBlock";
+import { PositionPnlBlock } from "../../components/blocks/lp/PositionPnlBlock";
+import { PositionRangeBlock } from "../../components/blocks/lp/PositionRangeBlock";
+import { RegimePanelBlock } from "../../components/blocks/lp/RegimePanelBlock";
 import {
   StrategyControlsBlock,
   type StrategyControlsState,
-} from "../../components/blocks/StrategyControlsBlock";
-import { StrategyHeatmapBlock } from "../../components/blocks/StrategyHeatmapBlock";
+} from "../../components/blocks/lp/StrategyControlsBlock";
+import { StrategyHeatmapBlock } from "../../components/blocks/lp/StrategyHeatmapBlock";
 import {
   DEFAULT_CONTROLS,
   DEFAULT_GRID_PERIOD_DAYS,
