@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card } from "../../primitives/Card";
-import {
-  formatSignedPercent,
-  formatUsd,
-} from "../../../lib/format";
+import { formatUsd } from "../../../lib/format";
 import { findBestRoute } from "../../../lib/arbitrage";
 import { median } from "../../../lib/stats";
 import { venueSwatchByIndex, type SwatchClass } from "../../../lib/venues";
 import type { MarketOverview } from "../../../features/arbitrage/types";
 import type { BlockRenderProps } from "./BlockRegistry";
 
-type ChartMode = "raw" | "deviation" | "spread" | "net";
+type ChartMode = "raw" | "spread" | "net";
 
 const MODE_LABELS: Record<ChartMode, string> = {
   raw: "Raw",
-  deviation: "Deviation",
   spread: "Spread",
   net: "Net P/L",
 };
@@ -232,29 +228,13 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
   let yTicks: string[] = [];
   let metricLabel = "";
   let metricValue = "";
-  /** Y-coordinate of the visual baseline for fill. Computed below per
-   *  mode — defaults to the primary series' lowest data point so the
-   *  fill represents the data's actual shape, not the chart's padded
-   *  floor. */
+  /** Y-coordinate of the visual baseline for fill. Only meaningful when
+   *  a series sets `fill: true` — currently only Net P/L mode does, and
+   *  only when the y-domain straddles zero (so the fill anchors at the
+   *  zero line and visualises profitable vs loss regions). */
   let baselineY = chartBottom;
   let showZeroLine = false;
   let zeroY = 0;
-
-  /** Helper: derive the fill baseline from the primary series. In
-   *  y-pixel space, the lowest data value has the highest y, so we take
-   *  max(points.y). The fill collapses to "from the line down to the
-   *  lowest sample seen" rather than "from the line down to the bottom
-   *  of the padded chart" — keeping the fill area proportional to the
-   *  range of motion in the data instead of always rendering a full-
-   *  height rectangle. */
-  function fillBaseline(primary: RenderSeries | undefined): number {
-    if (!primary || primary.points.length === 0) return chartBottom;
-    let maxY = primary.points[0].y;
-    for (const p of primary.points) if (p.y > maxY) maxY = p.y;
-    // Drop a few px below the lowest point so the fill has visible
-    // weight at the trough rather than collapsing to zero height.
-    return Math.min(chartBottom, maxY + 4);
-  }
 
   const venueNames = history[0].venues.map((venue) => venue.dexName);
 
@@ -264,7 +244,7 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
     );
     const domain = createDomain(allValues);
 
-    series = venueNames.map((venueName, idx) => {
+    series = venueNames.map((venueName) => {
       const points = history.map((entry, index) => {
         const venue = entry.venues.find((candidate) => candidate.dexName === venueName);
         const y = scaleY(venue?.priceUsd ?? domain.min, domain, chartTop, chartBottom);
@@ -275,7 +255,9 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
         label: venueName,
         swatch: venueSwatchByIndex(venueOrder.get(venueName) ?? 0),
         points,
-        fill: idx === 0,
+        // Multi-line view — fills muddy the read across overlapping
+        // venue traces. Lines alone are honest about the data.
+        fill: false,
       };
     });
 
@@ -284,53 +266,8 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
       formatUsd((domain.max + domain.min) / 2),
       formatUsd(domain.min),
     ];
-    baselineY = fillBaseline(series[0]);
     metricLabel = "Median";
     metricValue = formatUsd(samples[samples.length - 1].medianPrice);
-  } else if (mode === "deviation") {
-    const deviationByVenue = venueNames.map((venueName) => ({
-      venueName,
-      values: history.map((entry) => {
-        const prices = entry.venues.map((venue) => venue.priceUsd);
-        const midpoint = median(prices);
-        const venue = entry.venues.find((candidate) => candidate.dexName === venueName);
-        const value = venue?.priceUsd ?? midpoint;
-        return ((value - midpoint) / midpoint) * 100;
-      }),
-    }));
-
-    const domain = createDomain(deviationByVenue.flatMap((entry) => entry.values));
-    series = deviationByVenue.map((entry) => ({
-      label: entry.venueName,
-      swatch: venueSwatchByIndex(venueOrder.get(entry.venueName) ?? 0),
-      dashed: true,
-      // Multi-venue overlay with a real zero baseline below — fills
-      // would compete with the dashed lines and the zero anchor for
-      // attention. Lines alone read cleaner.
-      fill: false,
-      points: entry.values.map((value, index) => ({
-        x: xForIndex(index, totalSamples, padding.left, plotWidth),
-        y: scaleY(value, domain, chartTop, chartBottom),
-      })),
-    }));
-
-    yTicks = [
-      formatSignedPercent(domain.max, 2),
-      formatSignedPercent((domain.max + domain.min) / 2, 2),
-      formatSignedPercent(domain.min, 2),
-    ];
-    showZeroLine = domain.min < 0 && domain.max > 0;
-    zeroY = scaleY(0, domain, chartTop, chartBottom);
-    baselineY = showZeroLine ? zeroY : fillBaseline(series[0]);
-
-    const last = deviationByVenue
-      .map((entry) => ({
-        venueName: entry.venueName,
-        value: entry.values[entry.values.length - 1],
-      }))
-      .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))[0];
-    metricLabel = "Strongest";
-    metricValue = `${last.venueName} ${formatSignedPercent(last.value)}`;
   } else if (mode === "spread") {
     const spreadValues = samples.map((entry) => entry.spread);
     const domain = createDomain(spreadValues);
@@ -413,7 +350,7 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
     >
       <div className="chart-card">
         <div className="chart-controls">
-          {(["raw", "deviation", "spread", "net"] as ChartMode[]).map((current) => (
+          {(["raw", "spread", "net"] as ChartMode[]).map((current) => (
             <button
               key={current}
               type="button"
