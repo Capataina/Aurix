@@ -62,32 +62,97 @@
   font-family: var(--font-mono);
 }
 
+.chart-grid-vertical {
+  stroke: rgba(255, 255, 255, 0.025);
+  stroke-dasharray: 2 4;
+}
+
 .chart-line {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.6;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px var(--chart-glow, transparent));
 }
 
 .chart-line-dashed {
   stroke-dasharray: 4 4;
   opacity: 0.85;
+  stroke-width: 1.4;
 }
 
-.chart-venue-1 { stroke: var(--venue-1); color: var(--venue-1); }
-.chart-venue-2 { stroke: var(--venue-2); color: var(--venue-2); }
-.chart-venue-3 { stroke: var(--venue-3); color: var(--venue-3); }
-.chart-venue-4 { stroke: var(--venue-4); color: var(--venue-4); }
-.chart-venue-5 { stroke: var(--venue-5); color: var(--venue-5); }
-.chart-venue-6 { stroke: var(--venue-6); color: var(--venue-6); }
+.chart-fill {
+  stroke: none;
+}
+
+.chart-grad-from {
+  stop-color: currentColor;
+  stop-opacity: 0.32;
+}
+
+.chart-grad-to {
+  stop-color: currentColor;
+  stop-opacity: 0;
+}
+
+.chart-step-mark {
+  fill: currentColor;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 3px var(--chart-glow, transparent));
+}
+
+.chart-zero-line {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.chart-zero-label {
+  fill: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.chart-venue-1 {
+  stroke: var(--venue-1);
+  color: var(--venue-1);
+  --chart-glow: rgba(167, 139, 250, 0.45);
+}
+.chart-venue-2 {
+  stroke: var(--venue-2);
+  color: var(--venue-2);
+  --chart-glow: rgba(125, 211, 252, 0.45);
+}
+.chart-venue-3 {
+  stroke: var(--venue-3);
+  color: var(--venue-3);
+  --chart-glow: rgba(251, 191, 36, 0.4);
+}
+.chart-venue-4 {
+  stroke: var(--venue-4);
+  color: var(--venue-4);
+  --chart-glow: rgba(74, 222, 128, 0.45);
+}
+.chart-venue-5 {
+  stroke: var(--venue-5);
+  color: var(--venue-5);
+  --chart-glow: rgba(244, 114, 182, 0.4);
+}
+.chart-venue-6 {
+  stroke: var(--venue-6);
+  color: var(--venue-6);
+  --chart-glow: rgba(251, 146, 60, 0.4);
+}
 
 .chart-point {
   fill: currentColor;
+  filter: drop-shadow(0 0 5px var(--chart-glow, transparent));
 }
 
 .chart-point-ring {
   fill: currentColor;
-  opacity: 0.18;
+  opacity: 0.22;
 }
 
 .chart-event-point {
@@ -130,6 +195,13 @@
 .chart-legend-swatch.venue-5 { background: var(--venue-5); }
 .chart-legend-swatch.venue-6 { background: var(--venue-6); }
 .chart-legend-swatch.is-event { background: var(--status-up); box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.2); }
+.chart-legend-swatch.is-zero {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.4);
+  border-radius: 0;
+  height: 2px;
+  width: 14px;
+}
 
 .sparkline {
   display: block;
