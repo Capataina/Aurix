@@ -3,25 +3,32 @@ import { useEffect, useState } from "react";
 import { ArbitragePage } from "./features/arbitrage/ArbitragePage";
 import { LpBacktestPage } from "./features/lp-backtest/LpBacktestPage";
 import { TopBar, type ConnectionStatus } from "./components/shell/TopBar";
-import { useMarketData, type RefreshIntervalMs } from "./hooks/useMarketData";
+import {
+  SettingsMenu,
+  type StaleThresholdMs,
+} from "./components/shell/SettingsMenu";
+import {
+  useMarketData,
+  type HistoryLimit,
+  type RefreshIntervalMs,
+} from "./hooks/useMarketData";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { listPairs } from "./features/arbitrage/api";
 import type { PairSummary } from "./features/arbitrage/types";
 import { DEFAULT_PAIR_ID } from "./lib/config";
 import { DEFAULT_PNL_MODE, type PnlMode } from "./lib/arbitrage";
 
-const STALE_AFTER_MS = 8_000;
-
 function deriveConnectionStatus(
   intervalMs: RefreshIntervalMs,
   errorMessage: string | null,
   lastTickMs: number | null,
   nowMs: number,
+  staleAfterMs: number,
 ): ConnectionStatus {
   if (intervalMs === 0) return "paused";
   if (errorMessage) return "down";
   if (lastTickMs === null) return "stale";
-  if (nowMs - lastTickMs > STALE_AFTER_MS) return "stale";
+  if (nowMs - lastTickMs > staleAfterMs) return "stale";
   return "live";
 }
 
@@ -39,6 +46,18 @@ export default function App() {
     "aurix:pnl-mode",
     DEFAULT_PNL_MODE,
   );
+
+  // Settings (config menu)
+  const [heroVenueDexName, setHeroVenueDexName] =
+    usePersistedState<string | null>("aurix:hero-venue", null);
+  const [historyLimit, setHistoryLimit] = usePersistedState<HistoryLimit>(
+    "aurix:history-limit",
+    100,
+  );
+  const [staleThresholdMs, setStaleThresholdMs] =
+    usePersistedState<StaleThresholdMs>("aurix:stale-threshold-ms", 8000);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const [pairs, setPairs] = useState<PairSummary[]>([]);
 
   useEffect(() => {
@@ -47,7 +66,6 @@ export default function App() {
       .then((catalog) => {
         if (!cancelled) {
           setPairs(catalog);
-          // Defensive: if persisted pairId is no longer in the catalog, fall back.
           if (catalog.length > 0 && !catalog.some((entry) => entry.id === pairId)) {
             setPairId(catalog[0].id);
           }
@@ -62,7 +80,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const market = useMarketData(intervalMs, pairId);
+  const market = useMarketData(intervalMs, pairId, {
+    historyLimit,
+    heroVenueDexName,
+  });
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -76,6 +97,7 @@ export default function App() {
     market.errorMessage,
     lastTickMs,
     now,
+    staleThresholdMs,
   );
 
   const connectionLabel = market.overview?.chain ?? "Ethereum mainnet";
@@ -95,6 +117,20 @@ export default function App() {
         intervalMs={intervalMs}
         onSelectInterval={setIntervalMs}
         onRefresh={market.refresh}
+        onToggleSettings={() => setSettingsOpen((open) => !open)}
+        settingsOpen={settingsOpen}
+      />
+
+      <SettingsMenu
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        venues={market.overview?.venues ?? []}
+        heroVenueDexName={heroVenueDexName}
+        onSelectHero={setHeroVenueDexName}
+        historyLimit={historyLimit}
+        onSelectHistoryLimit={setHistoryLimit}
+        staleThresholdMs={staleThresholdMs}
+        onSelectStaleThreshold={setStaleThresholdMs}
       />
 
       <main className="app-main">

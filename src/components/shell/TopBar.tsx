@@ -1,4 +1,4 @@
-import { RefreshIcon } from "../primitives/Icon";
+import { RefreshIcon, SettingsIcon } from "../primitives/Icon";
 import type { RefreshIntervalMs } from "../../hooks/useMarketData";
 import type { PairSummary } from "../../features/arbitrage/types";
 import type { PnlMode } from "../../lib/arbitrage";
@@ -18,6 +18,8 @@ interface TopBarProps {
   intervalMs: RefreshIntervalMs;
   onSelectInterval: (interval: RefreshIntervalMs) => void;
   onRefresh: () => void;
+  onToggleSettings: () => void;
+  settingsOpen: boolean;
 }
 
 interface TabDef {
@@ -66,6 +68,8 @@ export function TopBar({
   intervalMs,
   onSelectInterval,
   onRefresh,
+  onToggleSettings,
+  settingsOpen,
 }: TopBarProps) {
   const poolFeesActive = pnlMode === "gas-and-fees";
 
@@ -179,6 +183,18 @@ export function TopBar({
           title="Refresh now"
         >
           <RefreshIcon className="topbar-button-icon" />
+        </button>
+
+        <button
+          type="button"
+          className={`topbar-button ${settingsOpen ? "is-primary" : ""}`}
+          onClick={onToggleSettings}
+          aria-label="Settings"
+          aria-expanded={settingsOpen}
+          title="Settings"
+          data-settings-trigger
+        >
+          <SettingsIcon className="topbar-button-icon" />
         </button>
       </div>
     </header>

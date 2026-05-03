@@ -9,7 +9,9 @@ export type RefreshIntervalMs = 1000 | 2000 | 5000 | 10_000 | 0;
 export interface MarketState {
   /** Most recent market overview (entire venue set + gas). */
   overview: MarketOverview | null;
-  /** Hero snapshot — convention is `overview.venues[0]` (V3 5bps for WETH/USDC). */
+  /** Hero snapshot — selected venue from the current overview. Defaults to
+   *  `overview.venues[0]` when the user-selected hero dex name is null or
+   *  not present in the active pair. */
   heroSnapshot: PriceSnapshot | null;
   /** Rolling history of overviews, oldest first, newest at the end. */
   history: MarketOverview[];
@@ -19,6 +21,14 @@ export interface MarketState {
   errorMessage: string | null;
   /** Trigger an immediate fetch outside the interval. */
   refresh: () => void;
+}
+
+interface UseMarketDataOptions {
+  /** Rolling buffer cap. Defaults to `HISTORY_LIMIT` (100). */
+  historyLimit?: number;
+  /** Preferred hero venue by `dexName`. When the active pair doesn't
+   *  include that venue, falls back to `venues[0]`. */
+  heroVenueDexName?: string | null;
 }
 
 /**
@@ -33,7 +43,10 @@ export interface MarketState {
 export function useMarketData(
   intervalMs: RefreshIntervalMs,
   pairId: string,
+  options: UseMarketDataOptions = {},
 ): MarketState {
+  const limit = options.historyLimit ?? HISTORY_LIMIT;
+  const heroVenueDexName = options.heroVenueDexName ?? null;
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [history, setHistory] = useState<MarketOverview[]>([]);
   const [loading, setLoading] = useState(false);
@@ -59,7 +72,7 @@ export function useMarketData(
       setErrorMessage(null);
       setHistory((prev) => {
         const merged = [...prev, next];
-        return merged.length > HISTORY_LIMIT ? merged.slice(-HISTORY_LIMIT) : merged;
+        return merged.length > limit ? merged.slice(-limit) : merged;
       });
     } catch (error) {
       if (activePairRef.current !== forPairId) {
@@ -96,9 +109,18 @@ export function useMarketData(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs, pairId]);
 
+  const resolvedHero =
+    overview === null
+      ? null
+      : heroVenueDexName !== null
+        ? (overview.venues.find((v) => v.dexName === heroVenueDexName) ??
+          overview.venues[0] ??
+          null)
+        : (overview.venues[0] ?? null);
+
   return {
     overview,
-    heroSnapshot: overview?.venues[0] ?? null,
+    heroSnapshot: resolvedHero,
     history,
     loading,
     errorMessage,
@@ -107,3 +129,7 @@ export function useMarketData(
     },
   };
 }
+
+/** Discrete history-buffer presets the settings menu offers. */
+export const HISTORY_LIMIT_OPTIONS = [50, 100, 200, 500] as const;
+export type HistoryLimit = (typeof HISTORY_LIMIT_OPTIONS)[number];

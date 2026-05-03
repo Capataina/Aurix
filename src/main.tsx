@@ -11,6 +11,7 @@ import "./styles/components/card.css";
 import "./styles/components/chart.css";
 import "./styles/components/blocks.css";
 import "./styles/components/dashboard.css";
+import "./styles/components/settings.css";
 import "./styles/components/lp-backtest.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
