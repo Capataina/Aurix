@@ -232,11 +232,29 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
   let yTicks: string[] = [];
   let metricLabel = "";
   let metricValue = "";
-  /** Y-coordinate of the visual baseline for fill (and zero ref line in
-   *  modes where 0 is meaningful). */
+  /** Y-coordinate of the visual baseline for fill. Computed below per
+   *  mode — defaults to the primary series' lowest data point so the
+   *  fill represents the data's actual shape, not the chart's padded
+   *  floor. */
   let baselineY = chartBottom;
   let showZeroLine = false;
   let zeroY = 0;
+
+  /** Helper: derive the fill baseline from the primary series. In
+   *  y-pixel space, the lowest data value has the highest y, so we take
+   *  max(points.y). The fill collapses to "from the line down to the
+   *  lowest sample seen" rather than "from the line down to the bottom
+   *  of the padded chart" — keeping the fill area proportional to the
+   *  range of motion in the data instead of always rendering a full-
+   *  height rectangle. */
+  function fillBaseline(primary: RenderSeries | undefined): number {
+    if (!primary || primary.points.length === 0) return chartBottom;
+    let maxY = primary.points[0].y;
+    for (const p of primary.points) if (p.y > maxY) maxY = p.y;
+    // Drop a few px below the lowest point so the fill has visible
+    // weight at the trough rather than collapsing to zero height.
+    return Math.min(chartBottom, maxY + 4);
+  }
 
   const venueNames = history[0].venues.map((venue) => venue.dexName);
 
@@ -266,6 +284,7 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
       formatUsd((domain.max + domain.min) / 2),
       formatUsd(domain.min),
     ];
+    baselineY = fillBaseline(series[0]);
     metricLabel = "Median";
     metricValue = formatUsd(samples[samples.length - 1].medianPrice);
   } else if (mode === "deviation") {
@@ -281,11 +300,14 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
     }));
 
     const domain = createDomain(deviationByVenue.flatMap((entry) => entry.values));
-    series = deviationByVenue.map((entry, idx) => ({
+    series = deviationByVenue.map((entry) => ({
       label: entry.venueName,
       swatch: venueSwatchByIndex(venueOrder.get(entry.venueName) ?? 0),
       dashed: true,
-      fill: idx === 0,
+      // Multi-venue overlay with a real zero baseline below — fills
+      // would compete with the dashed lines and the zero anchor for
+      // attention. Lines alone read cleaner.
+      fill: false,
       points: entry.values.map((value, index) => ({
         x: xForIndex(index, totalSamples, padding.left, plotWidth),
         y: scaleY(value, domain, chartTop, chartBottom),
@@ -299,7 +321,7 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
     ];
     showZeroLine = domain.min < 0 && domain.max > 0;
     zeroY = scaleY(0, domain, chartTop, chartBottom);
-    baselineY = zeroY;
+    baselineY = showZeroLine ? zeroY : fillBaseline(series[0]);
 
     const last = deviationByVenue
       .map((entry) => ({
@@ -317,7 +339,11 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
       {
         label: "Spread",
         swatch: "venue-2",
-        fill: true,
+        // Spread is a scalar with no meaningful zero baseline visible
+        // (it's always >= 0, but the y-axis zooms tight to the data
+        // so zero is off-screen). A fill would just be decorative.
+        // Leaving the line bare keeps the read honest.
+        fill: false,
         points: spreadValues.map((value, index) => ({
           x: xForIndex(index, totalSamples, padding.left, plotWidth),
           y: scaleY(value, domain, chartTop, chartBottom),
@@ -336,11 +362,17 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
     const netValues = samples.map((entry) => entry.netUsd);
     const domain = createDomain(netValues);
 
+    showZeroLine = domain.min < 0 && domain.max > 0;
+    zeroY = scaleY(0, domain, chartTop, chartBottom);
     series = [
       {
         label: pnlMode === "gas-and-fees" ? "Net (gas + fees)" : "Net (gas)",
         swatch: "venue-4",
-        fill: true,
+        // Fill only when zero is on-screen — then the area above zero
+        // reads as "profitable region" and below as "loss region", which
+        // is informationally meaningful. Otherwise drop the fill since
+        // it would just be decorative.
+        fill: showZeroLine,
         points: netValues.map((value, index) => ({
           x: xForIndex(index, totalSamples, padding.left, plotWidth),
           y: scaleY(value, domain, chartTop, chartBottom),
@@ -353,9 +385,7 @@ export function PriceChartBlock({ market, pnlMode, onRemove }: BlockRenderProps)
       formatUsd((domain.max + domain.min) / 2),
       formatUsd(domain.min),
     ];
-    showZeroLine = domain.min < 0 && domain.max > 0;
-    zeroY = scaleY(0, domain, chartTop, chartBottom);
-    baselineY = zeroY;
+    baselineY = showZeroLine ? zeroY : chartBottom;
     metricLabel = "Net";
     metricValue = formatUsd(netValues[netValues.length - 1]);
   }
