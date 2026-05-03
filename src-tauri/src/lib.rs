@@ -1,3 +1,4 @@
+mod backtest;
 mod commands;
 mod config;
 mod dex;

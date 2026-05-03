@@ -19,8 +19,5 @@ pub mod liquidity;
 pub mod q96;
 pub mod tick;
 
-// Re-exports kept narrow — modules import from their canonical paths
-// inside the math/ tree; downstream Aurix code (backtest, validation,
-// strategy) imports from `crate::math::<submod>::<name>`.
-#[allow(unused_imports)]
 pub use error::V3MathError;
+pub use tick::{sqrt_price_x96_to_tick, tick_to_sqrt_price_x96};
