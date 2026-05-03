@@ -215,4 +215,173 @@ mod tests {
         let ingester = Ingester::new(storage, mock);
         assert_eq!(ingester.safe_to_block().await.unwrap(), 123_456);
     }
+
+    // ─── Live smoke tests against Alchemy ────────────────────────────
+    //
+    // These hit the real chain via whatever key is in `.env`. Run with:
+    //
+    //   cargo test --lib ingest::tests::live_ -- --ignored --nocapture
+    //
+    // They are `#[ignore]` so the normal `cargo test` stays offline + free.
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_alchemy_finalized_block() {
+        use crate::ingest::AlchemyArchiveSource;
+
+        let source = AlchemyArchiveSource::from_environment()
+            .expect("Alchemy key not configured — set ALCHEMY_API_KEY in .env");
+        let block = source.latest_finalized_block().await.expect("RPC call");
+        println!("✓ finalized block: {block}");
+        assert!(
+            block > 19_000_000,
+            "finalized block looks unrealistically low: {block}"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_alchemy_ingest_10_block_range() {
+        use crate::ingest::AlchemyArchiveSource;
+
+        let source = AlchemyArchiveSource::from_environment()
+            .expect("Alchemy key not configured")
+            .with_payg_unbounded(false); // 10-block chunks on free tier
+
+        let storage = Storage::open(DbLocation::in_memory()).await.unwrap();
+
+        // V3 5bps WETH/USDC pool. 100-block window — wide enough to catch
+        // at least one Mint/Burn/Collect event and exercise the full
+        // decoder vocabulary.
+        let pool = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+        let from_block = 19_000_000u64;
+        let to_block = 19_000_099u64;
+
+        let ingester = Ingester::new(storage.clone(), Arc::new(source));
+        let report = ingester
+            .backfill(pool, from_block, to_block)
+            .await
+            .expect("backfill");
+
+        println!(
+            "✓ live ingest: {} swaps + {} pool events + {} gas rows over blocks {}-{}",
+            report.swap_rows_persisted,
+            report.pool_event_rows_persisted,
+            report.gas_rows_persisted,
+            from_block,
+            to_block,
+        );
+
+        let count = storage
+            .count_swap_events(pool.to_string())
+            .await
+            .unwrap();
+        assert!(count > 0, "no swaps persisted in live block range");
+
+        let swaps = storage
+            .query_swaps_for_pool_range(pool.to_string(), from_block as i64, to_block as i64)
+            .await
+            .unwrap();
+        let first = &swaps[0];
+        println!(
+            "✓ first swap: blk={} log={} tx=0x{}… tick={} sqrt=0x{:x}… gas={:?}gwei",
+            first.block_number,
+            first.log_index,
+            &first.transaction_hash[2..10],
+            first.tick,
+            num_bigint::BigUint::parse_bytes(first.sqrt_price_x96.as_bytes(), 10)
+                .unwrap_or_default()
+                .iter_u64_digits()
+                .last()
+                .unwrap_or(0),
+            first.block_gas_price_gwei,
+        );
+        assert!(first.tick > -887_272 && first.tick < 887_272);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_alchemy_ingest_then_backtest() {
+        use crate::backtest::{Engine, PositionConfig, RebalanceRule};
+        use crate::ingest::AlchemyArchiveSource;
+
+        let source = AlchemyArchiveSource::from_environment()
+            .expect("Alchemy key not configured")
+            .with_payg_unbounded(false);
+
+        let storage = Storage::open(DbLocation::in_memory()).await.unwrap();
+
+        let pool = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
+        let from_block = 19_000_000u64;
+        let to_block = 19_000_099u64;
+
+        let ingester = Ingester::new(storage.clone(), Arc::new(source));
+        ingester
+            .backfill(pool, from_block, to_block)
+            .await
+            .expect("backfill");
+
+        let swaps = storage
+            .query_swaps_for_pool_range(pool.to_string(), from_block as i64, to_block as i64)
+            .await
+            .unwrap();
+        assert!(!swaps.is_empty(), "no swaps to replay");
+        let entry_tick = swaps[0].tick;
+
+        // V3 5bps WETH/USDC pool: USDC (0xA0b8…) < WETH (0xC02a…) so
+        // token0 = USDC (6 dec), token1 = WETH (18 dec).
+        let config = PositionConfig {
+            pool_address: pool.to_string(),
+            tick_lower: entry_tick - 500,
+            tick_upper: entry_tick + 500,
+            deposit_token0: "3000000000".into(),     // 3000 USDC
+            deposit_token1: "1000000000000000000".into(), // 1 WETH
+            entry_block: from_block,
+            exit_block: to_block,
+            fee_tier_bps: 5,
+            token0_decimals: 6,
+            token1_decimals: 18,
+            mev_haircut_bps: 0.0,
+        };
+
+        let engine = Engine::new(&storage);
+        let out = engine
+            .simulate(config, RebalanceRule::Static)
+            .await
+            .expect("simulate");
+
+        println!(
+            "✓ backtest on real chain data:\n\
+             \tsamples: {}\n\
+             \ttime in range: {:.1}%\n\
+             \tfees:    ${:.6}\n\
+             \tIL:      ${:.6}\n\
+             \tLVR:     ${:.6}\n\
+             \tmgmt gas:${:.6}\n\
+             \tfinal:   ${:.4}\n\
+             \thold:    ${:.4}\n\
+             \tnet PnL: ${:.6}\n\
+             \tSharpe:  {:.3}\n\
+             \tSortino: {:.3}\n\
+             \tmax DD:  {:.3}%",
+            out.equity_curve.len(),
+            out.summary.time_in_range_pct,
+            out.summary.total_fees_usd,
+            out.summary.total_il_usd,
+            out.summary.total_lvr_usd,
+            out.summary.total_mgmt_gas_usd,
+            out.summary.final_value_usd,
+            out.summary.hold_only_value_usd,
+            out.summary.net_pnl_usd,
+            out.summary.sharpe,
+            out.summary.sortino,
+            out.summary.max_drawdown_pct,
+        );
+
+        assert_eq!(out.equity_curve.len(), swaps.len());
+        assert!(
+            out.summary.total_mgmt_gas_usd > 0.0,
+            "mgmt gas should have been paid"
+        );
+    }
 }

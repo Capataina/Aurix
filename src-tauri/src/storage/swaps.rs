@@ -88,6 +88,9 @@ impl Storage {
         start_block: i64,
         end_block: i64,
     ) -> Result<Vec<SwapEventRow>, StorageError> {
+        // On-chain log.address is always lowercase; user-supplied pool
+        // addresses (EIP-55 checksummed) need to match.
+        let pool_address = pool_address.to_lowercase();
         let pool = self.reader_pool.clone();
         let rows = tokio::task::spawn_blocking(move || -> Result<Vec<SwapEventRow>, StorageError> {
             let conn = pool.get()?;
@@ -135,6 +138,7 @@ impl Storage {
         &self,
         pool_address: String,
     ) -> Result<Option<i64>, StorageError> {
+        let pool_address = pool_address.to_lowercase();
         let pool = self.reader_pool.clone();
         let max_block = tokio::task::spawn_blocking(move || -> Result<Option<i64>, StorageError> {
             let conn = pool.get()?;
@@ -156,6 +160,7 @@ impl Storage {
     /// Returns the count of swap rows in the table — useful for tests +
     /// dashboards.
     pub async fn count_swap_events(&self, pool_address: String) -> Result<i64, StorageError> {
+        let pool_address = pool_address.to_lowercase();
         let pool = self.reader_pool.clone();
         let count = tokio::task::spawn_blocking(move || -> Result<i64, StorageError> {
             let conn = pool.get()?;

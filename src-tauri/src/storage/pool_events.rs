@@ -106,6 +106,7 @@ impl Storage {
         end_block: i64,
         kind: Option<PoolEventKind>,
     ) -> Result<Vec<PoolEventRow>, StorageError> {
+        let pool_address = pool_address.to_lowercase();
         let pool = self.reader_pool.clone();
         let rows = tokio::task::spawn_blocking(move || -> Result<Vec<PoolEventRow>, StorageError> {
             let conn = pool.get()?;
@@ -159,6 +160,8 @@ impl Storage {
         pool_address: String,
         owner: String,
     ) -> Result<Vec<PoolEventRow>, StorageError> {
+        let pool_address = pool_address.to_lowercase();
+        let owner = owner.to_lowercase();
         let pool = self.reader_pool.clone();
         let rows = tokio::task::spawn_blocking(move || -> Result<Vec<PoolEventRow>, StorageError> {
             let conn = pool.get()?;
