@@ -1,8 +1,8 @@
 [package]
 name = "aurix"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.2.0"
+description = "Aurix — local-first DeFi analytics desktop application"
+authors = ["Caner"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -28,4 +28,20 @@ num-bigint = "0.4"
 num-traits = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+# M2.0 — persistence layer (rusqlite + tokio-rusqlite + r2d2 + refinery per
+# context/references/sqlite-rust-production-patterns.md). bundled feature
+# compiles SQLite from source so the binary is reproducible across user
+# machines and does not depend on a system-installed libsqlite3.
+rusqlite = { version = "0.31", features = ["bundled", "blob"] }
+tokio-rusqlite = "0.5"
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+refinery = { version = "0.8", features = ["rusqlite"] }
+once_cell = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"

@@ -3,6 +3,9 @@ mod config;
 mod dex;
 mod ethereum;
 mod market;
+mod storage;
+
+pub use storage::{DbLocation, Storage};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
