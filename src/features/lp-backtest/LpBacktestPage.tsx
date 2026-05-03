@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   lpFetchBenchmarkSeries,
@@ -224,19 +224,28 @@ export function LpBacktestPage() {
   }, []);
 
   // Auto-run on mount: chain-head fetch → synthetic ingest → backtest →
-  // grid → headline. Tracks first-mount state via a ref so re-mounting
-  // (e.g. tab switch) doesn't kick off another full pipeline.
-  const initialised = useRef(false);
-
+  // grid → headline. The pipeline is fully idempotent (storage uses
+  // INSERT OR IGNORE for swap rows + config_hash for runs/headline) so
+  // we DON'T guard against StrictMode's double-mount. The previous
+  // `initialised.current` ref guard caused a real bug: StrictMode would
+  // unmount mid-flight, set the cleanup's `cancelled = true`, and the
+  // remount would skip the effect entirely (initialised was already
+  // true) — leaving the dashboard stuck in busy=true forever.
+  //
+  // Every state setter is gated on a per-closure `mounted` flag, so the
+  // cancelled run's stale state updates simply no-op (idempotent at the
+  // React level) and the second StrictMode run drives state to
+  // completion. In production (no double-mount) it just runs once.
   useEffect(() => {
-    if (initialised.current) return;
-    initialised.current = true;
+    let mounted = true;
+    void runPipeline();
 
-    let cancelled = false;
-    (async () => {
+    async function runPipeline() {
       try {
-        setBusy(true);
-        setStatus("Resolving recent block window…");
+        // eslint-disable-next-line no-console
+        console.log("[lp] auto-run: starting");
+        if (mounted) setBusy(true);
+        if (mounted) setStatus("Resolving recent block window…");
 
         // Default the block window to "the last 1000 blocks of the
         // chain". The synthetic ingest then generates fake swaps over
@@ -247,36 +256,53 @@ export function LpBacktestPage() {
         let fromBlock = DEFAULT_CONTROLS.fromBlock;
         try {
           const head = await lpGetChainHead();
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: chain head =", head);
           if (typeof head === "number" && head > 1000) {
             toBlock = head;
             fromBlock = head - 1000;
           }
-        } catch {
-          /* No key / RPC unreachable — quietly use the static default. */
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log(
+            "[lp] auto-run: chain head fetch failed (using fallback) —",
+            e,
+          );
         }
-        if (cancelled) return;
+        if (!mounted) return;
 
         const resolvedControls = {
           ...DEFAULT_CONTROLS,
           fromBlock,
           toBlock,
         };
-        setControls(resolvedControls);
+        if (mounted) setControls(resolvedControls);
 
-        setStatus("Auto-running pipeline…");
-        await runLpSyntheticIngest(
+        if (mounted) setStatus("Running synthetic ingest…");
+        const ingestReport = await runLpSyntheticIngest(
           resolvedControls.poolAddress,
           resolvedControls.fromBlock,
           resolvedControls.toBlock,
         );
-        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.log("[lp] auto-run: synthetic ingest →", ingestReport);
+        if (!mounted) return;
 
+        if (mounted) setStatus("Running backtest…");
         const cfg = positionConfigOf(resolvedControls);
         const response = await runLpBacktest(cfg, resolvedControls.rule);
-        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.log(
+          "[lp] auto-run: backtest →",
+          response.summary,
+          response.equityCurve.length,
+          "samples",
+        );
+        if (!mounted) return;
         setSummary(response.summary);
         setCurve(response.equityCurve);
 
+        if (mounted) setStatus("Running strategy grid…");
         const gridConfig: GridConfig = {
           grid_id: `auto_${Date.now()}`,
           pool_address: resolvedControls.poolAddress,
@@ -298,30 +324,41 @@ export function LpBacktestPage() {
           ),
         };
         const gridRows = await runLpGrid(gridConfig);
-        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.log("[lp] auto-run: grid →", gridRows.length, "cells");
+        if (!mounted) return;
         setStrategies(gridRows);
 
+        if (mounted) setStatus("Synthesising headline…");
         const headlineConfig = synthesiseHeadlineConfig(
           resolvedControls.poolAddress,
           gridRows,
         );
         if (headlineConfig) {
           const out = await runLpHeadline(headlineConfig);
-          if (cancelled) return;
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: headline →", out.summary);
+          if (!mounted) return;
           setHeadline(out.summary);
           setHeadlineMonthly(out.monthly);
         }
 
-        if (!cancelled) setStatus("Auto-run complete");
+        if (mounted) {
+          setStatus("Auto-run complete");
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: COMPLETE");
+        }
       } catch (e) {
-        if (!cancelled) setStatus(`Auto-run failed: ${formatError(e)}`);
+        // eslint-disable-next-line no-console
+        console.error("[lp] auto-run: FAILED —", e);
+        if (mounted) setStatus(`Auto-run failed: ${formatError(e)}`);
       } finally {
-        if (!cancelled) setBusy(false);
+        if (mounted) setBusy(false);
       }
-    })();
+    }
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
