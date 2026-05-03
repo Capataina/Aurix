@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ArbitragePage } from "./features/arbitrage/ArbitragePage";
+import { LpBacktestPage } from "./features/lp-backtest/LpBacktestPage";
 import { TopBar, type ConnectionStatus } from "./components/shell/TopBar";
 import { useMarketData, type RefreshIntervalMs } from "./hooks/useMarketData";
 import { usePersistedState } from "./hooks/usePersistedState";
@@ -120,6 +121,11 @@ export default function App() {
           <ArbitragePage
             market={market}
             pnlMode={pnlMode}
+            drawerOpen={drawerOpen}
+            onCloseDrawer={() => setDrawerOpen(false)}
+          />
+        ) : activeTabId === "lp-backtester" ? (
+          <LpBacktestPage
             drawerOpen={drawerOpen}
             onCloseDrawer={() => setDrawerOpen(false)}
           />

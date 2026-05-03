@@ -30,7 +30,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "arbitrage", label: "Arbitrage", status: "active" },
-  { id: "lp-backtester", label: "LP Backtester", status: "soon" },
+  { id: "lp-backtester", label: "LP Backtester", status: "active" },
   { id: "wallet", label: "Wallet", status: "soon" },
   { id: "gas", label: "Gas", status: "soon" },
   { id: "risk", label: "Risk", status: "soon" },

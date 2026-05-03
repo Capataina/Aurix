@@ -1,0 +1,335 @@
+/* Tab 2 — LP Backtester. Coherent with the Tab 1 card-grid idiom: each
+   block lives in a Card primitive and the page stacks rows vertically
+   on a flex container. */
+
+.lp-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+  padding: var(--gap-lg);
+  width: 100%;
+}
+
+.lp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.lp-row {
+  width: 100%;
+}
+
+/* ─── Strategy controls block ─────────────────────────────────────── */
+
+.lp-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.lp-controls-row {
+  display: flex;
+  gap: var(--gap-sm);
+  flex-wrap: wrap;
+}
+
+.lp-controls-arg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85em;
+  flex: 1 1 110px;
+}
+
+.lp-controls-arg span {
+  color: var(--text-muted);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lp-controls-arg input,
+.lp-controls-arg select {
+  background: var(--surface-deep);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.lp-controls-arg input:focus,
+.lp-controls-arg select:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.lp-controls-pool {
+  flex: 1 1 100%;
+}
+
+.lp-controls-rule {
+  flex: 1 1 200px;
+}
+
+.lp-controls-actions {
+  display: flex;
+  gap: var(--gap-sm);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--gap-sm);
+}
+
+.lp-button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+
+.lp-button:hover:not(:disabled) {
+  background: var(--surface-elevated);
+  border-color: var(--accent-soft);
+}
+
+.lp-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lp-button.is-primary {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.lp-button.is-primary:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.lp-select {
+  background: var(--surface-deep);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85em;
+}
+
+/* ─── Equity curve block ──────────────────────────────────────────── */
+
+.lp-equity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.lp-equity-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.lp-equity-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lp-equity-stat-label {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lp-equity-stat-value {
+  font-size: 1.05em;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.lp-equity-chart {
+  width: 100%;
+  height: 220px;
+  background: var(--surface-deep);
+  border-radius: 6px;
+}
+
+.lp-equity-legend {
+  display: flex;
+  gap: var(--gap-md);
+  flex-wrap: wrap;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.lp-equity-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lp-equity-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* ─── Headline block ──────────────────────────────────────────────── */
+
+.lp-headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.lp-headline-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  align-items: flex-start;
+  color: var(--text-muted);
+}
+
+.lp-headline-rate {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.lp-headline-rate-label {
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+.lp-headline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) 0;
+}
+
+.lp-headline-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-deep);
+  border-radius: 6px;
+  padding: var(--gap-sm);
+  border: 1px solid var(--border);
+}
+
+.lp-headline-cell-label {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lp-headline-cell-value {
+  font-size: 1.2em;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.lp-headline-prose {
+  margin: 0;
+  font-size: 0.95em;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-deep);
+  border-left: 3px solid var(--accent);
+  padding: var(--gap-sm) var(--gap-md);
+  border-radius: 4px;
+}
+
+.lp-headline-actions {
+  display: flex;
+  gap: var(--gap-sm);
+}
+
+/* ─── Strategy heatmap + regime tables ────────────────────────────── */
+
+.lp-strategy-table,
+.lp-regime-table {
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.lp-strategy-table table,
+.lp-regime-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.lp-strategy-table th,
+.lp-strategy-table td,
+.lp-regime-table th,
+.lp-regime-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.lp-strategy-table th,
+.lp-regime-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: right;
+}
+
+.lp-strategy-table td:first-child,
+.lp-strategy-table th:first-child,
+.lp-regime-table td:first-child,
+.lp-regime-table th:first-child {
+  text-align: left;
+}
+
+.lp-strategy-table tbody tr:hover,
+.lp-regime-table tbody tr:hover {
+  background: var(--surface-elevated);
+}
+
+/* ─── Empty / utility ─────────────────────────────────────────────── */
+
+.lp-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  font-size: 0.95em;
+  color: var(--text-muted);
+  padding: var(--gap-md);
+}
+
+.lp-utility {
+  display: flex;
+  gap: var(--gap-sm);
+  flex-wrap: wrap;
+  padding: var(--gap-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.lp-page.is-drawer-open {
+  /* Drawer dim is applied at the app shell level; nothing extra here. */
+}
