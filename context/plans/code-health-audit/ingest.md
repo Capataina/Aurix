@@ -9,7 +9,7 @@ The ingest layer translates Ethereum archive data (live RPC via Alchemy, hosted 
 
 ### Avoid per-event byte-by-byte allocation in `parse_int24_word` for V3 swap streams
 
-- [ ] In `src-tauri/src/ingest/decoder.rs:91-109`, `parse_int24_word` re-runs `hex::decode(word)` and allocates a fresh `Vec<u8>` per call. For a typical Swap event the function is called once (the trailing tick word). For a backfill of 100k swaps that's 100k transient `Vec<u8>` allocations of 32 bytes each. The arithmetic only needs the last 4 bytes of the hex string — pre-slice and parse without going through `hex::decode`'s general-purpose path.
+- [x] In `src-tauri/src/ingest/decoder.rs:91-109`, `parse_int24_word` re-runs `hex::decode(word)` and allocates a fresh `Vec<u8>` per call. For a typical Swap event the function is called once (the trailing tick word). For a backfill of 100k swaps that's 100k transient `Vec<u8>` allocations of 32 bytes each. The arithmetic only needs the last 4 bytes of the hex string — pre-slice and parse without going through `hex::decode`'s general-purpose path. *(implemented 2026-05-04 in commit b2e6863 — `u32::from_str_radix` on trailing 6 hex chars)*
 
 **Category:** Performance Improvement
 **Severity:** Medium

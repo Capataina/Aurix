@@ -9,7 +9,7 @@ The Aurix V3 math stack is a deliberate clean-room port of `FullMath.sol` + `Tic
 
 ### Pre-compute the 20 tick-magic constants once
 
-- [ ] Convert `MAGIC: [&str; 20]` plus the per-call `magic(bit) -> BigUint` parser in `src-tauri/src/math/tick.rs:21-49` into a `Lazy<[BigUint; 20]>` static so the BigUint allocations happen exactly once for the process lifetime instead of on every tick decode.
+- [x] Convert `MAGIC: [&str; 20]` plus the per-call `magic(bit) -> BigUint` parser in `src-tauri/src/math/tick.rs:21-49` into a `Lazy<[BigUint; 20]>` static so the BigUint allocations happen exactly once for the process lifetime instead of on every tick decode. *(implemented 2026-05-04 in commit b2e6863)*
 
 **Category:** Performance Improvement
 **Severity:** High
@@ -81,7 +81,7 @@ The existing test suite (`tick_zero_is_q96`, `tick_min_matches_min_sqrt_ratio`, 
 
 ### Simplify the redundant double-condition on dropped bits
 
-- [ ] Replace the redundant `if !dropped.bits().eq(&0) { if dropped > BigUint::from(0u8) { ... } }` block in `src-tauri/src/math/tick.rs:87-94` with a single `if !dropped.is_zero() { sqrt_price_x96 += 1u8; }`.
+- [x] Replace the redundant `if !dropped.bits().eq(&0) { if dropped > BigUint::from(0u8) { ... } }` block in `src-tauri/src/math/tick.rs:87-94` with a single `if !dropped.is_zero() { sqrt_price_x96 += 1u8; }`. *(implemented 2026-05-04 in commit b2e6863)*
 
 **Category:** Algorithm Optimisation
 **Severity:** Low

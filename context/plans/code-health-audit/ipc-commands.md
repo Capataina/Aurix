@@ -72,7 +72,7 @@ Zero functional change. The Tauri command names and signatures are unchanged; on
 
 ### Reuse the `reqwest::Client` for `lp_token_usd_prices` instead of rebuilding per call
 
-- [ ] In `src-tauri/src/commands/lp.rs:574-580`, `reqwest::Client::builder().timeout(...).build()` runs on every invocation of `lp_token_usd_prices`. Hoist the client into a `OnceCell<reqwest::Client>` initialised once at first use. The `ReqwestFetcher` used by the `lp_fetch_benchmark_series` path already follows the reuse pattern (see `benchmarks/http.rs`); `lp_token_usd_prices` is the outlier.
+- [x] In `src-tauri/src/commands/lp.rs:574-580`, `reqwest::Client::builder().timeout(...).build()` runs on every invocation of `lp_token_usd_prices`. Hoist the client into a `OnceCell<reqwest::Client>` initialised once at first use. The `ReqwestFetcher` used by the `lp_fetch_benchmark_series` path already follows the reuse pattern (see `benchmarks/http.rs`); `lp_token_usd_prices` is the outlier. *(implemented 2026-05-04 in commit b2e6863 — `TOKEN_PRICE_CLIENT: Lazy<reqwest::Client>` static)*
 
 **Category:** Performance Improvement
 **Severity:** Medium
@@ -131,7 +131,7 @@ Zero functional change. The HTTP behaviour is identical — same URL, same heade
 
 ### Replace `eprintln!` fallthrough logging in `run_lp_ingestion` with the project's existing error-surfacing convention
 
-- [ ] `src-tauri/src/commands/lp.rs:138, 150` use `eprintln!` to log the subgraph- and Alchemy-path failures during the tiered fallback. The rest of the project surfaces errors via the `thiserror::Error` enum + structured error types (per `notes/error-handling.md`); `eprintln!` is the only place stderr text appears in user-facing flows.
+- [x] `src-tauri/src/commands/lp.rs:138, 150` use `eprintln!` to log the subgraph- and Alchemy-path failures during the tiered fallback. The rest of the project surfaces errors via the `thiserror::Error` enum + structured error types (per `notes/error-handling.md`); `eprintln!` is the only place stderr text appears in user-facing flows. *(implemented 2026-05-04 in commit b2e6863 — `IngestionReport.source_label` + `attempted_sources: Vec<AttemptedSource>` carries the tiered-fallback trail through the IPC instead of stderr)*
 
 **Category:** Inconsistent Patterns
 **Severity:** Low

@@ -11,7 +11,7 @@ The behavioural envelope of the engine is pinned by the existing 5 tests in `bac
 
 ### Hoist invariant USD-conversion of hold-only baseline out of the per-swap loop
 
-- [ ] In `src-tauri/src/backtest/engine.rs:253`, the per-step `value_usd(&hold_amount0, &hold_amount1, cur_price)` call walks `position_usd_value(_explicit)` from scratch each iteration. The token-amount→decimal conversion does not change across iterations; only the price does. Pre-compute the decimal-adjusted token amounts once before the loop, then multiply by `cur_price` per step.
+- [x] In `src-tauri/src/backtest/engine.rs:253`, the per-step `value_usd(&hold_amount0, &hold_amount1, cur_price)` call walks `position_usd_value(_explicit)` from scratch each iteration. The token-amount→decimal conversion does not change across iterations; only the price does. Pre-compute the decimal-adjusted token amounts once before the loop, then multiply by `cur_price` per step. *(implemented 2026-05-04 in commit b2e6863 — `HoldOnlyEvaluator` struct)*
 
 **Category:** Performance Improvement
 **Severity:** High
@@ -81,7 +81,7 @@ Zero functional change (verified by analysis). The pool-ratio path's `position_u
 
 ### Accumulate fees-USD incrementally instead of re-converting accumulators every step
 
-- [ ] In `src-tauri/src/backtest/engine.rs:249`, `value_usd(&fees_token0_acc, &fees_token1_acc, cur_price)` re-walks the (monotonically growing) BigUint accumulators every iteration. Replace with an incremental accumulator that adds the *delta-fees-USD* per swap.
+- [x] In `src-tauri/src/backtest/engine.rs:249`, `value_usd(&fees_token0_acc, &fees_token1_acc, cur_price)` re-walks the (monotonically growing) BigUint accumulators every iteration. Replace with an incremental accumulator that adds the *delta-fees-USD* per swap. *(implemented 2026-05-04 in commit b2e6863 — `fees_usd_acc` running sum)*
 
 **Category:** Algorithm Optimisation
 **Severity:** Medium
@@ -140,7 +140,7 @@ If the backtester ever needs strict deterministic-replay equivalence with a publ
 
 ### Pre-parse swap rows once instead of per-loop-iteration
 
-- [ ] The per-swap loop calls `parse_sqrt(&swap.sqrt_price_x96)`, `parse_signed(&swap.amount0)`, `parse_signed(&swap.amount1)`, and `parse_liquidity(&swap.liquidity)` on every iteration (lines 150, 167-168, 157). These are `BigUint::parse_bytes` calls on TEXT-encoded decimals stored in SQLite. Move the parsing to a one-shot pass at swap-load time.
+- [x] The per-swap loop calls `parse_sqrt(&swap.sqrt_price_x96)`, `parse_signed(&swap.amount0)`, `parse_signed(&swap.amount1)`, and `parse_liquidity(&swap.liquidity)` on every iteration (lines 150, 167-168, 157). These are `BigUint::parse_bytes` calls on TEXT-encoded decimals stored in SQLite. Move the parsing to a one-shot pass at swap-load time. *(implemented 2026-05-04 in commit b2e6863 — Option A: `ParsedSwap` struct + `parse_swaps()` helper)*
 
 **Category:** Data Layout and Memory Access Patterns
 **Severity:** High

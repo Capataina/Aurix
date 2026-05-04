@@ -9,7 +9,7 @@ These findings span multiple subsystems or affect the project as a whole. They a
 
 ### Reconcile `context/architecture.md`'s subsystem list with the existing `context/systems/` files
 
-- [ ] `context/architecture.md` (just updated 2026-05-04) names 14 subsystem rows in its responsibilities table; `context/systems/` contains only 4 files (`arbitrage-analytics.md`, `arbitrage-gui.md`, `arbitrage-market-data.md`, `runtime-foundation.md`). The 8 new Vector A subsystems shipped on 2026-05-03 (storage, math, ingest, backtest, validation, strategies, benchmarks, headline) are described in `architecture.md` but have no per-system documentation. Either add the 8 missing system files, or update `architecture.md`'s table to reflect that systems-level docs are pending for the Vector A subsystems.
+- [x] `context/architecture.md` (just updated 2026-05-04) names 14 subsystem rows in its responsibilities table; `context/systems/` contains only 4 files (`arbitrage-analytics.md`, `arbitrage-gui.md`, `arbitrage-market-data.md`, `runtime-foundation.md`). The 8 new Vector A subsystems shipped on 2026-05-03 (storage, math, ingest, backtest, validation, strategies, benchmarks, headline) are described in `architecture.md` but have no per-system documentation. Either add the 8 missing system files, or update `architecture.md`'s table to reflect that systems-level docs are pending for the Vector A subsystems. *(implemented 2026-05-04 in commit 06a629e via the upkeep-context skill — 10 new systems/*.md + 4 new convention notes)*
 
 **Category:** Documentation Rot
 **Severity:** Medium
@@ -45,7 +45,7 @@ Documentation only — no production behaviour change.
 
 ### Frontend `console.log` diagnostic lines should route through the new telemetry recorder
 
-- [ ] The LP backtest page contains ~12 `// eslint-disable-next-line no-console` `console.log("[lp] auto-run: ...")` lines (`LpBacktestPage.tsx:111-189` and elsewhere). The 2026-05-03 sprint introduced `src/lib/telemetry.ts` specifically to replace these — but the `console.log` lines were not retired during the same sprint. The two patterns now coexist, with `telemetry.record` calls at some lifecycle points and `console.log` at others.
+- [x] The LP backtest page contains ~12 `// eslint-disable-next-line no-console` `console.log("[lp] auto-run: ...")` lines (`LpBacktestPage.tsx:111-189` and elsewhere). The 2026-05-03 sprint introduced `src/lib/telemetry.ts` specifically to replace these — but the `console.log` lines were not retired during the same sprint. The two patterns now coexist, with `telemetry.record` calls at some lifecycle points and `console.log` at others. *(implemented 2026-05-04 in commit b01b4f4 — all 14 `console.log + eslint-disable` pairs replaced with structured `telemetry.record` calls on `lp.pipeline.*` events)*
 
 **Category:** Inconsistent Patterns
 **Severity:** Medium
@@ -82,7 +82,7 @@ Negligible-flagged. The information captured is unchanged; only the destination 
 
 ### Investigate the `_link_mock` shim in `commands/lp.rs`
 
-- [ ] `src-tauri/src/commands/lp.rs:626-628` declares `#[allow(dead_code)] fn _link_mock(_: MockHttpFetcher) {}` to silence an unused-import warning for `MockHttpFetcher`. Either use `MockHttpFetcher` properly somewhere in the IPC layer, or remove the import. The shim is a workaround for a code-organisation issue, not a real callsite.
+- [x] `src-tauri/src/commands/lp.rs:626-628` declares `#[allow(dead_code)] fn _link_mock(_: MockHttpFetcher) {}` to silence an unused-import warning for `MockHttpFetcher`. Either use `MockHttpFetcher` properly somewhere in the IPC layer, or remove the import. The shim is a workaround for a code-organisation issue, not a real callsite. *(resolved 2026-05-04 in commit b2e6863 — shim and `MockHttpFetcher` import removed)*
 
 **Category:** Triage Needed
 **Severity:** Low
