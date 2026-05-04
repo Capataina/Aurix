@@ -29,6 +29,10 @@ use super::http::HttpFetcher;
 pub const FRED_DGS3MO_URL: &str = "https://fred.stlouisfed.org/data/DGS3MO.txt";
 pub const FRED_DGS1_URL: &str = "https://fred.stlouisfed.org/data/DGS1.txt";
 pub const FRED_GOLD_LBMA_URL: &str = "https://fred.stlouisfed.org/data/GOLDAMGBD228NLBM.txt";
+/// FRED S&P 500 daily close. License with S&P limits historical depth
+/// to ~10 years; for our 6-month lookback that's irrelevant. No API
+/// key required — uses the public `.txt` file endpoint.
+pub const FRED_SP500_URL: &str = "https://fred.stlouisfed.org/data/SP500.txt";
 pub const STOOQ_VOO_URL: &str = "https://stooq.com/q/d/l/?s=voo.us&i=d";
 pub const STOOQ_XAUUSD_URL: &str = "https://stooq.com/q/d/l/?s=xauusd&i=d";
 

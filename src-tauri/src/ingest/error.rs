@@ -17,6 +17,9 @@ pub enum IngestError {
     #[error("malformed log: {0}")]
     MalformedLog(String),
 
+    #[error("transport error: {0}")]
+    Transport(String),
+
     #[error("unsupported event topic: 0x{0}")]
     UnsupportedTopic(String),
 

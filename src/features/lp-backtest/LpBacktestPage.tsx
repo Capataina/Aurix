@@ -1,34 +1,36 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   lpFetchBenchmarkSeries,
   lpGetChainHead,
+  lpPoolMetadata,
+  lpQueryFirstSwapPrice,
   lpQueryHeadlineMonthly,
   lpQueryStrategies,
+  lpTokenUsdPrices,
   runLpBacktest,
   runLpGrid,
   runLpHeadline,
   runLpIngestion,
-  runLpSyntheticIngest,
 } from "./api";
+import { CHAIN_CONFIGS } from "./chains";
+import type { PoolMetadata } from "./types";
+import { telemetry, useTelemetrySnapshot } from "../../lib/telemetry";
 import { BenchmarkCacheBlock } from "../../components/blocks/lp/BenchmarkCacheBlock";
 import { EquityCurveBlock } from "../../components/blocks/lp/EquityCurveBlock";
 import { HeadlineVerdictBlock } from "../../components/blocks/lp/HeadlineVerdictBlock";
 import { KeyMetricsBlock } from "../../components/blocks/lp/KeyMetricsBlock";
+import { MultiAssetCompareBlock } from "../../components/blocks/lp/MultiAssetCompareBlock";
 import { PositionPnlBlock } from "../../components/blocks/lp/PositionPnlBlock";
 import { PositionRangeBlock } from "../../components/blocks/lp/PositionRangeBlock";
 import { RegimePanelBlock } from "../../components/blocks/lp/RegimePanelBlock";
-import {
-  StrategyControlsBlock,
-  type StrategyControlsState,
-} from "../../components/blocks/lp/StrategyControlsBlock";
 import { StrategyHeatmapBlock } from "../../components/blocks/lp/StrategyHeatmapBlock";
 import {
-  DEFAULT_CONTROLS,
   DEFAULT_GRID_PERIOD_DAYS,
   DEFAULT_GRID_RANGE_WIDTHS,
   DEFAULT_GRID_RULES,
 } from "./defaults";
+import type { LpSettings } from "./LpSettingsForm";
 import type {
   BenchmarkPoint,
   EquityCurvePoint,
@@ -46,8 +48,21 @@ interface BenchmarkSeriesMap {
   [seriesKey: string]: BenchmarkPoint[];
 }
 
-export function LpBacktestPage() {
-  const [controls, setControls] = useState<StrategyControlsState>(DEFAULT_CONTROLS);
+interface LpBacktestPageProps {
+  settings: LpSettings;
+  /** Bumping this nonce re-triggers the pipeline. The "Re-run pipeline"
+   *  button in the LP settings panel increments it. */
+  rerunNonce: number;
+  /** Forwards busy state up so the SettingsMenu's re-run button can
+   *  disable while the pipeline is in flight. */
+  onBusyChange: (busy: boolean) => void;
+}
+
+export function LpBacktestPage({
+  settings,
+  rerunNonce,
+  onBusyChange,
+}: LpBacktestPageProps) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [summary, setSummary] = useState<PositionRunSummary | null>(null);
@@ -56,241 +71,239 @@ export function LpBacktestPage() {
   const [headline, setHeadline] = useState<HeadlineRunSummary | null>(null);
   const [headlineMonthly, setHeadlineMonthly] = useState<HeadlineMonthlyRow[]>([]);
   const [benchmarks, setBenchmarks] = useState<BenchmarkSeriesMap>({});
+  /** Realised entry tick + price + block window from the most-recent
+   *  pipeline run. Drives the `PositionRangeBlock` so it always matches
+   *  what the engine actually simulated. */
+  const [resolved, setResolved] = useState<{
+    fromBlock: number;
+    toBlock: number;
+    tickLower: number;
+    tickUpper: number;
+    entryPrice: number;
+  } | null>(null);
+  const [poolMeta, setPoolMeta] = useState<PoolMetadata | null>(null);
 
-  const positionConfigOf = useCallback(
-    (state: StrategyControlsState): PositionConfig => ({
-      poolAddress: state.poolAddress,
-      tickLower: state.tickLower,
-      tickUpper: state.tickUpper,
-      depositToken0: humanToRaw(state.depositUsd / 2 / 3000, 18),
-      depositToken1: humanToRaw(state.depositUsd / 2, 6),
-      entryBlock: state.fromBlock,
-      exitBlock: state.toBlock,
-      feeTierBps: state.feeTierBps,
-      token0Decimals: 18,
-      token1Decimals: 6,
-      mevHaircutBps: state.mevHaircutBps,
-    }),
-    [],
-  );
+  // Mirror busy → parent so the settings panel's Re-run button reflects state.
+  useEffect(() => {
+    onBusyChange(busy);
+  }, [busy, onBusyChange]);
 
-  const handleRunBacktest = useCallback(
-    async (silent = false) => {
-      if (!silent) setBusy(true);
-      setStatus("Running backtest…");
-      try {
-        const response = await runLpBacktest(positionConfigOf(controls), controls.rule);
-        setSummary(response.summary);
-        setCurve(response.equityCurve);
-        setStatus("Backtest complete");
-      } catch (e) {
-        setStatus(`Backtest failed: ${formatError(e)}`);
-      } finally {
-        if (!silent) setBusy(false);
-      }
-    },
-    [controls, positionConfigOf],
-  );
+  // Auto-run when settings change or when the user hits "Re-run".
+  // Settings changes go through a settings-snapshot-stable JSON key so
+  // typing into a stepper doesn't fire the pipeline mid-keystroke (the
+  // settings object identity changes on every keystroke; the JSON
+  // doesn't change until the value lands).
+  const settingsKey = JSON.stringify(settings);
 
-  const handleSyntheticIngest = useCallback(
-    async (silent = false) => {
-      if (!silent) setBusy(true);
-      setStatus("Generating synthetic swaps…");
-      try {
-        const report = await runLpSyntheticIngest(
-          controls.poolAddress,
-          controls.fromBlock,
-          controls.toBlock,
-        );
-        setStatus(`Ingested ${report.swapRowsPersisted} swaps over ${controls.toBlock - controls.fromBlock + 1} blocks`);
-      } catch (e) {
-        setStatus(`Synthetic ingest failed: ${formatError(e)}`);
-      } finally {
-        if (!silent) setBusy(false);
-      }
-    },
-    [controls.poolAddress, controls.fromBlock, controls.toBlock],
-  );
-
-  const handleLiveIngest = useCallback(async () => {
-    setBusy(true);
-    setStatus("Live ingest via Alchemy…");
-    try {
-      const report = await runLpIngestion(
-        controls.poolAddress,
-        controls.fromBlock,
-        controls.toBlock,
-      );
-      setStatus(`Live ingest: ${report.swapRowsPersisted} swaps`);
-    } catch (e) {
-      const msg = formatError(e);
-      if (msg.toLowerCase().includes("api key")) {
-        setStatus("Live ingest needs MAINNET_RPC_URL or ALCHEMY_API_KEY in .env");
-      } else {
-        setStatus(`Live ingest failed: ${msg}`);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }, [controls.poolAddress, controls.fromBlock, controls.toBlock]);
-
-  const handleRunGrid = useCallback(
-    async (silent = false): Promise<StrategyResultRow[]> => {
-      if (!silent) setBusy(true);
-      setStatus("Running strategy grid…");
-      try {
-        const config: GridConfig = {
-          grid_id: `auto_${Date.now()}`,
-          pool_address: controls.poolAddress,
-          range_widths_pct: DEFAULT_GRID_RANGE_WIDTHS,
-          rebalance_rules: DEFAULT_GRID_RULES,
-          deposits_usd: [controls.depositUsd],
-          periods_days: [DEFAULT_GRID_PERIOD_DAYS],
-          fee_tier_bps: controls.feeTierBps,
-          token0_decimals: 18,
-          token1_decimals: 6,
-          mev_haircut_bps: controls.mevHaircutBps,
-          period_end_block: controls.toBlock,
-          blocks_per_day: Math.max(
-            1,
-            Math.floor((controls.toBlock - controls.fromBlock + 1) / DEFAULT_GRID_PERIOD_DAYS),
-          ),
-        };
-        const rows = await runLpGrid(config);
-        setStrategies(rows);
-        setStatus(`Grid: ${rows.length} cells`);
-        return rows;
-      } catch (e) {
-        setStatus(`Grid failed: ${formatError(e)}`);
-        return [];
-      } finally {
-        if (!silent) setBusy(false);
-      }
-    },
-    [controls],
-  );
-
-  const handleSynthesiseHeadline = useCallback(
-    async (gridRows: StrategyResultRow[] | null = null, silent = false) => {
-      if (!silent) setBusy(true);
-      setStatus("Synthesising headline…");
-      try {
-        const rows = gridRows ?? strategies;
-        if (!rows.length) {
-          setStatus("Grid empty — run grid first");
-          return;
-        }
-        const config = synthesiseHeadlineConfig(controls.poolAddress, rows);
-        if (!config) {
-          setStatus("Could not synthesise — grid empty");
-          return;
-        }
-        const out = await runLpHeadline(config);
-        setHeadline(out.summary);
-        setHeadlineMonthly(out.monthly);
-        setStatus("Headline synthesised");
-      } catch (e) {
-        setStatus(`Headline failed: ${formatError(e)}`);
-      } finally {
-        if (!silent) setBusy(false);
-      }
-    },
-    [controls.poolAddress, strategies],
-  );
-
-  const handleFetchBenchmarks = useCallback(async () => {
-    setBusy(true);
-    setStatus("Fetching benchmark series…");
-    try {
-      const series = ["aave_v3_usdc_supply_apy", "lido_steth_apy", "fred_dgs3mo", "stooq_voo"];
-      const results = await Promise.allSettled(series.map((s) => lpFetchBenchmarkSeries(s)));
-      const next: BenchmarkSeriesMap = {};
-      let ok = 0;
-      results.forEach((r, i) => {
-        if (r.status === "fulfilled") {
-          next[series[i]] = r.value;
-          ok += 1;
-        } else {
-          next[series[i]] = [];
-        }
-      });
-      setBenchmarks(next);
-      setStatus(`Benchmarks fetched: ${ok}/${series.length} series`);
-    } catch (e) {
-      setStatus(`Benchmark fetch failed: ${formatError(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
-  // Auto-run on mount: chain-head fetch → synthetic ingest → backtest →
-  // grid → headline. The pipeline is fully idempotent (storage uses
-  // INSERT OR IGNORE for swap rows + config_hash for runs/headline) so
-  // we DON'T guard against StrictMode's double-mount. The previous
-  // `initialised.current` ref guard caused a real bug: StrictMode would
-  // unmount mid-flight, set the cleanup's `cancelled = true`, and the
-  // remount would skip the effect entirely (initialised was already
-  // true) — leaving the dashboard stuck in busy=true forever.
-  //
-  // Every state setter is gated on a per-closure `mounted` flag, so the
-  // cancelled run's stale state updates simply no-op (idempotent at the
-  // React level) and the second StrictMode run drives state to
-  // completion. In production (no double-mount) it just runs once.
   useEffect(() => {
     let mounted = true;
     void runPipeline();
 
     async function runPipeline() {
       try {
+        telemetry.record("lp.pipeline.start", {
+          poolAddress: settings.poolAddress,
+          chainId: settings.chainId,
+          protocol: settings.protocol,
+          lookbackBlocks: settings.lookbackBlocks,
+          rerunNonce,
+        });
         // eslint-disable-next-line no-console
-        console.log("[lp] auto-run: starting");
+        console.log("[lp] auto-run: starting · settings=", settings);
         if (mounted) setBusy(true);
-        if (mounted) setStatus("Resolving recent block window…");
+        if (mounted) setStatus("Fetching pool metadata…");
 
-        // Default the block window to "the last 1000 blocks of the
-        // chain". The synthetic ingest then generates fake swaps over
-        // that range — block numbers feel current and the same window
-        // is reusable for live ingest later. Falls back to the static
-        // DEFAULT_CONTROLS window when no Alchemy key is configured.
-        let toBlock = DEFAULT_CONTROLS.toBlock;
-        let fromBlock = DEFAULT_CONTROLS.fromBlock;
+        // Pool metadata first — gives us decimals + symbols so all
+        // downstream math stops assuming WETH(18)/USDC(6).
+        let meta: PoolMetadata | null = null;
         try {
-          const head = await lpGetChainHead();
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: chain head =", head);
-          if (typeof head === "number" && head > 1000) {
-            toBlock = head;
-            fromBlock = head - 1000;
-          }
-        } catch (e) {
+          meta = await lpPoolMetadata(
+            settings.poolAddress,
+            settings.chainId,
+            settings.protocol,
+          );
+          if (mounted) setPoolMeta(meta);
           // eslint-disable-next-line no-console
           console.log(
-            "[lp] auto-run: chain head fetch failed (using fallback) —",
-            e,
+            "[lp] auto-run: pool metadata →",
+            meta.token0Symbol,
+            "/",
+            meta.token1Symbol,
+            "decimals",
+            meta.token0Decimals,
+            meta.token1Decimals,
+            "feeTier",
+            meta.feeTierBps,
+            "bps",
+          );
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: pool metadata fetch failed —", e);
+          if (mounted) setStatus("Pool metadata unavailable; using defaults");
+        }
+
+        if (mounted) setStatus("Resolving recent block window…");
+
+        // Resolve the trailing block window against the live chain
+        // head every run. No persisted from/to — `lookbackBlocks` is
+        // the only knob, the window is always [head − N, head].
+        // Note: chain head is currently always Ethereum's; tier 2
+        // expansion adds per-chain head fetching via public RPCs.
+        let head: number | null = null;
+        try {
+          head = await lpGetChainHead(settings.chainId);
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: chain head =", head);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log("[lp] auto-run: chain head fetch failed —", e);
+        }
+        if (head === null || head < settings.lookbackBlocks) {
+          // No reachable RPC for this chain. Surface as an error so
+          // the user knows to check connectivity / configure a key.
+          // No synthetic fallback — fake numbers in a portfolio piece
+          // is a worse signal than an empty dashboard with a clear
+          // "needs setup" message.
+          throw new Error(
+            `Could not reach ${settings.chainId} chain head. Check network or configure a key.`,
           );
         }
+        const toBlock = head;
+        const fromBlock = head - settings.lookbackBlocks;
         if (!mounted) return;
 
-        const resolvedControls = {
-          ...DEFAULT_CONTROLS,
+        // Live ingest only — the backend's tiered fallback (subgraph
+        // → user-Alchemy → public RPC) covers connectivity gaps. If
+        // all three paths fail we surface that error clearly rather
+        // than fabricating data. Fake numbers in a public-facing tool
+        // is a worse signal than an honest empty state.
+        if (mounted) setStatus("Running live ingest…");
+        const ingestReport = await runLpIngestion(
+          settings.poolAddress,
           fromBlock,
           toBlock,
-        };
-        if (mounted) setControls(resolvedControls);
-
-        if (mounted) setStatus("Running synthetic ingest…");
-        const ingestReport = await runLpSyntheticIngest(
-          resolvedControls.poolAddress,
-          resolvedControls.fromBlock,
-          resolvedControls.toBlock,
+          settings.chainId,
+          settings.protocol,
         );
         // eslint-disable-next-line no-console
-        console.log("[lp] auto-run: synthetic ingest →", ingestReport);
+        console.log("[lp] auto-run: live ingest →", ingestReport);
         if (!mounted) return;
 
+        // Realised entry tick + price from the first swap. Replaces
+        // any hardcoded tick-range or /price assumption — the position
+        // adapts to whatever the data actually shows.
+        const t0Decimals = meta?.token0Decimals ?? 18;
+        const t1Decimals = meta?.token1Decimals ?? 6;
+
+        // Token-USD prices for non-USD-quote pools (tier 4). When the
+        // pool isn't quoted in a stablecoin, we need external feeds to
+        // value the position in USD. Skip the call entirely for
+        // already-USD-quoted pools — the in-pool ratio is sufficient.
+        let token0UsdPrice: number | null = null;
+        let token1UsdPrice: number | null = null;
+        if (meta && !meta.isToken1UsdPegged) {
+          try {
+            const { prices } = await lpTokenUsdPrices(
+              [meta.token0Address, meta.token1Address],
+              settings.chainId,
+            );
+            token0UsdPrice = prices[meta.token0Address.toLowerCase()] ?? null;
+            token1UsdPrice = prices[meta.token1Address.toLowerCase()] ?? null;
+            // eslint-disable-next-line no-console
+            console.log(
+              "[lp] auto-run: token USD prices →",
+              meta.token0Symbol,
+              token0UsdPrice,
+              meta.token1Symbol,
+              token1UsdPrice,
+            );
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.log("[lp] auto-run: token USD price fetch failed —", e);
+          }
+        }
+        const firstSwap = await lpQueryFirstSwapPrice(
+          settings.poolAddress,
+          fromBlock,
+          toBlock,
+          t0Decimals,
+          t1Decimals,
+        );
+        const tickAnchor = firstSwap?.tick ?? 0;
+        const tickLower = tickAnchor - settings.tickHalfWidth;
+        const tickUpper = tickAnchor + settings.tickHalfWidth;
+        const entryPrice = firstSwap?.humanPrice ?? 1;
+        if (!mounted) return;
+        setResolved({ fromBlock, toBlock, tickLower, tickUpper, entryPrice });
+        // eslint-disable-next-line no-console
+        console.log(
+          "[lp] auto-run: first swap → tick",
+          tickAnchor,
+          "price",
+          entryPrice.toFixed(4),
+        );
+
+        // Fan out the benchmark fetches in parallel with the rest of
+        // the pipeline.
+        const benchmarkSeriesKeys = [
+          "aave_v3_usdc_supply_apy",
+          "lido_steth_apy",
+          "fred_dgs3mo",
+          "stooq_voo",
+          "fred_gold_lbma",
+        ];
+        const benchmarkPromise = Promise.allSettled(
+          benchmarkSeriesKeys.map((s) => lpFetchBenchmarkSeries(s)),
+        ).then((results) => {
+          const next: BenchmarkSeriesMap = {};
+          results.forEach((r, i) => {
+            next[benchmarkSeriesKeys[i]] = r.status === "fulfilled" ? r.value : [];
+          });
+          if (mounted) setBenchmarks(next);
+          // eslint-disable-next-line no-console
+          console.log(
+            "[lp] auto-run: benchmarks →",
+            results.filter((r) => r.status === "fulfilled").length,
+            "of",
+            benchmarkSeriesKeys.length,
+            "fetched",
+          );
+          return next;
+        });
+
         if (mounted) setStatus("Running backtest…");
-        const cfg = positionConfigOf(resolvedControls);
-        const response = await runLpBacktest(cfg, resolvedControls.rule);
+        // Deposit split: assume token1 is USD-pegged for now (tier 4
+        // generalises this with per-token USD pricing). For
+        // non-USD-quote pools (WBTC/ETH, LDO/ETH) the math degrades
+        // to "treat token1 as if it were USDC" — gives the right
+        // shape, wrong absolute scale; we'll fix in tier 4.
+        // Deposit split: when token1 is USD-pegged (USDC/USDT/DAI),
+        // depositUsd / 2 USDC + (depositUsd / 2) / entryPrice token0
+        // is the right 50/50 split. When token1 is NOT USD-pegged,
+        // we use the per-token USD prices to convert: each side gets
+        // depositUsd/2 worth, scaled by the token's USD price.
+        const depositToken0Raw = token0UsdPrice
+          ? humanToRaw(settings.depositUsd / 2 / token0UsdPrice, t0Decimals)
+          : humanToRaw(settings.depositUsd / 2 / entryPrice, t0Decimals);
+        const depositToken1Raw = token1UsdPrice
+          ? humanToRaw(settings.depositUsd / 2 / token1UsdPrice, t1Decimals)
+          : humanToRaw(settings.depositUsd / 2, t1Decimals);
+        const cfg: PositionConfig = {
+          poolAddress: settings.poolAddress,
+          tickLower,
+          tickUpper,
+          depositToken0: depositToken0Raw,
+          depositToken1: depositToken1Raw,
+          entryBlock: fromBlock,
+          exitBlock: toBlock,
+          feeTierBps: meta?.feeTierBps ?? settings.feeTierBps,
+          token0Decimals: t0Decimals,
+          token1Decimals: t1Decimals,
+          mevHaircutBps: settings.mevHaircutBps,
+          token0UsdPrice,
+          token1UsdPrice,
+        };
+        const response = await runLpBacktest(cfg, settings.rule);
         // eslint-disable-next-line no-console
         console.log(
           "[lp] auto-run: backtest →",
@@ -303,23 +316,27 @@ export function LpBacktestPage() {
         setCurve(response.equityCurve);
 
         if (mounted) setStatus("Running strategy grid…");
+        const chainConfig = CHAIN_CONFIGS[settings.chainId];
         const gridConfig: GridConfig = {
           grid_id: `auto_${Date.now()}`,
-          pool_address: resolvedControls.poolAddress,
+          pool_address: settings.poolAddress,
           range_widths_pct: DEFAULT_GRID_RANGE_WIDTHS,
           rebalance_rules: DEFAULT_GRID_RULES,
-          deposits_usd: [resolvedControls.depositUsd],
+          deposits_usd: [settings.depositUsd],
           periods_days: [DEFAULT_GRID_PERIOD_DAYS],
-          fee_tier_bps: resolvedControls.feeTierBps,
-          token0_decimals: 18,
-          token1_decimals: 6,
-          mev_haircut_bps: resolvedControls.mevHaircutBps,
-          period_end_block: resolvedControls.toBlock,
+          fee_tier_bps: meta?.feeTierBps ?? settings.feeTierBps,
+          token0_decimals: t0Decimals,
+          token1_decimals: t1Decimals,
+          mev_haircut_bps: settings.mevHaircutBps,
+          period_end_block: toBlock,
+          // Chain-aware: blocks per day depends on the chain's block
+          // time. Falls back to "fit period in window" when the
+          // window is shorter than a single period.
           blocks_per_day: Math.max(
             1,
-            Math.floor(
-              (resolvedControls.toBlock - resolvedControls.fromBlock + 1) /
-                DEFAULT_GRID_PERIOD_DAYS,
+            Math.min(
+              chainConfig.approxBlocksPerDay,
+              Math.floor((toBlock - fromBlock + 1) / DEFAULT_GRID_PERIOD_DAYS),
             ),
           ),
         };
@@ -330,9 +347,11 @@ export function LpBacktestPage() {
         setStrategies(gridRows);
 
         if (mounted) setStatus("Synthesising headline…");
+        const benchmarksForHeadline = await benchmarkPromise;
         const headlineConfig = synthesiseHeadlineConfig(
-          resolvedControls.poolAddress,
+          settings.poolAddress,
           gridRows,
+          benchmarksForHeadline,
         );
         if (headlineConfig) {
           const out = await runLpHeadline(headlineConfig);
@@ -347,10 +366,15 @@ export function LpBacktestPage() {
           setStatus("Auto-run complete");
           // eslint-disable-next-line no-console
           console.log("[lp] auto-run: COMPLETE");
+          telemetry.record("lp.pipeline.complete", {
+            samples: response.equityCurve.length,
+            gridCells: gridRows.length,
+          });
         }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("[lp] auto-run: FAILED —", e);
+        telemetry.record("lp.pipeline.failed", { error: formatError(e) });
         if (mounted) setStatus(`Auto-run failed: ${formatError(e)}`);
       } finally {
         if (mounted) setBusy(false);
@@ -361,52 +385,175 @@ export function LpBacktestPage() {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settingsKey, rerunNonce]);
 
-  const positionConfig = positionConfigOf(controls);
+  // Continuously snapshot what's rendered so the telemetry log
+  // captures the dashboard's current state without screenshots.
+  // Heavy structures (equity curve, every grid row, every monthly row)
+  // are reduced to counts + first/last samples — the full data already
+  // lands in the log via the `ipc.end` response capture.
+  useTelemetrySnapshot("lp-dashboard", {
+    busy,
+    status,
+    settings,
+    resolved,
+    summary: summary
+      ? {
+          configHash: summary.config_hash,
+          finalValueUsd: summary.final_value_usd,
+          holdOnlyValueUsd: summary.hold_only_value_usd,
+          totalFeesUsd: summary.total_fees_usd,
+          totalIlUsd: summary.total_il_usd,
+          totalLvrUsd: summary.total_lvr_usd,
+          totalMgmtGasUsd: summary.total_mgmt_gas_usd,
+          netPnlUsd: summary.net_pnl_usd,
+          timeInRangePct: summary.time_in_range_pct,
+          rebalanceCount: summary.rebalance_count,
+          maxDrawdownPct: summary.max_drawdown_pct,
+          sharpe: summary.sharpe,
+          sortino: summary.sortino,
+        }
+      : null,
+    curve: curve.length
+      ? {
+          samples: curve.length,
+          first: curve[0],
+          last: curve[curve.length - 1],
+        }
+      : null,
+    strategies: strategies.length
+      ? {
+          count: strategies.length,
+          top: strategies[0],
+        }
+      : null,
+    headline: headline
+      ? {
+          monthsLpBeatLending: headline.monthsLpBeatLending,
+          monthsLpBeatSp500: headline.monthsLpBeatSp500,
+          monthsLpBeatGold: headline.monthsLpBeatGold,
+          monthsLpBeatTbill: headline.monthsLpBeatTbill,
+          monthsTotal: headline.monthsTotal,
+          medianHighVolSpread: headline.medianHighVolSpread,
+          medianMedVolSpread: headline.medianMedVolSpread,
+          medianLowVolSpread: headline.medianLowVolSpread,
+          medianSp500Spread: headline.medianSp500Spread,
+          medianGoldSpread: headline.medianGoldSpread,
+          medianTbillSpread: headline.medianTbillSpread,
+          verdictText: headline.verdictText,
+        }
+      : null,
+    headlineMonthlyCount: headlineMonthly.length,
+    benchmarks: Object.fromEntries(
+      Object.entries(benchmarks).map(([k, v]) => [
+        k,
+        {
+          points: v.length,
+          last: v[v.length - 1] ?? null,
+        },
+      ]),
+    ),
+  });
+
+  // Position config derived for the range visualisation pane (not the
+  // engine — engine uses the in-flight `cfg` from the pipeline above).
+  const positionConfig = useMemo<PositionConfig>(() => {
+    const t0Decimals = poolMeta?.token0Decimals ?? 18;
+    const t1Decimals = poolMeta?.token1Decimals ?? 6;
+    if (!resolved) {
+      return {
+        poolAddress: settings.poolAddress,
+        tickLower: -settings.tickHalfWidth,
+        tickUpper: settings.tickHalfWidth,
+        depositToken0: "0",
+        depositToken1: "0",
+        entryBlock: 0,
+        exitBlock: 0,
+        feeTierBps: poolMeta?.feeTierBps ?? settings.feeTierBps,
+        token0Decimals: t0Decimals,
+        token1Decimals: t1Decimals,
+        mevHaircutBps: settings.mevHaircutBps,
+      };
+    }
+    return {
+      poolAddress: settings.poolAddress,
+      tickLower: resolved.tickLower,
+      tickUpper: resolved.tickUpper,
+      depositToken0: humanToRaw(settings.depositUsd / 2 / resolved.entryPrice, t0Decimals),
+      depositToken1: humanToRaw(settings.depositUsd / 2, t1Decimals),
+      entryBlock: resolved.fromBlock,
+      exitBlock: resolved.toBlock,
+      feeTierBps: poolMeta?.feeTierBps ?? settings.feeTierBps,
+      token0Decimals: t0Decimals,
+      token1Decimals: t1Decimals,
+      mevHaircutBps: settings.mevHaircutBps,
+    };
+  }, [settings, resolved, poolMeta]);
 
   return (
     <div className="dashboard-page">
+      {status ? (
+        <div className={`lp-page-status ${busy ? "is-busy" : "is-idle"}`}>
+          <span className="lp-page-status-dot" />
+          <span className="lp-page-status-text">{status}</span>
+          {resolved ? (
+            <span className="lp-page-status-meta mono">
+              blocks {resolved.fromBlock}…{resolved.toBlock} ·{" "}
+              entry ≈ {resolved.entryPrice.toLocaleString("en-US", {
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="dashboard-grid">
-        {/* Row 1 — verdict (8) + key metrics (4) */}
+        {/* Row 1 — multi-asset comparison HERO (full width) */}
+        <div className="dashboard-row dashboard-row-1">
+          <MultiAssetCompareBlock
+            summary={headline}
+            monthly={headlineMonthly}
+            busy={busy}
+          />
+        </div>
+
+        {/* Row 2 — verdict (8) + key metrics (4) */}
         <div className="dashboard-row dashboard-row-2-1">
           <HeadlineVerdictBlock summary={headline} busy={busy} />
           <KeyMetricsBlock summary={summary} />
         </div>
 
-        {/* Row 2 — equity curve full width */}
+        {/* Row 3 — equity curve full width */}
         <div className="dashboard-row dashboard-row-1">
           <EquityCurveBlock summary={summary} curve={curve} />
         </div>
 
-        {/* Row 3 — pnl + range full split */}
+        {/* Row 4 — pnl + range */}
         <div className="dashboard-row dashboard-row-1-1">
           <PositionPnlBlock summary={summary} curve={curve} />
           <PositionRangeBlock config={positionConfig} curve={curve} />
         </div>
 
-        {/* Row 4 — controls (4) + strategy grid (8) */}
-        <div className="dashboard-row dashboard-row-1-2">
-          <StrategyControlsBlock
-            state={controls}
-            onChange={setControls}
-            onRunBacktest={() => handleRunBacktest()}
-            onRunSyntheticIngest={() => handleSyntheticIngest()}
-            onRunLiveIngest={handleLiveIngest}
-            onRunGrid={() => handleRunGrid()}
-            onSynthesiseHeadline={() => handleSynthesiseHeadline()}
-            busy={busy}
-            status={status}
-          />
+        {/* Row 5 — regime panel (full) */}
+        <div className="dashboard-row dashboard-row-1">
+          <RegimePanelBlock rows={headlineMonthly} />
+        </div>
+
+        {/* Row 6 — strategy grid full width (controls now live in
+            the gear-icon settings panel on the top bar). */}
+        <div className="dashboard-row dashboard-row-1">
           <StrategyHeatmapBlock rows={strategies} />
         </div>
 
-        {/* Row 5 — regime panel (8) + benchmarks (4) */}
-        <div className="dashboard-row dashboard-row-2-1">
-          <RegimePanelBlock rows={headlineMonthly} />
+        {/* Row 7 — raw benchmark cache. */}
+        <div className="dashboard-row dashboard-row-1">
           <BenchmarkCacheBlock
             series={benchmarks}
-            onFetch={handleFetchBenchmarks}
+            onFetch={() => {
+              /* benchmarks auto-fetch each pipeline run; this manual
+                 button is now a no-op pass-through to satisfy the
+                 BenchmarkCacheBlock prop contract. */
+            }}
             busy={busy}
           />
         </div>
@@ -424,13 +571,22 @@ function humanToRaw(human: number, decimals: number): string {
 function synthesiseHeadlineConfig(
   pool: string,
   strategies: StrategyResultRow[],
+  benchmarks: BenchmarkSeriesMap,
 ): HeadlineConfig | null {
   if (!strategies.length) return null;
   const months = 6;
+  const monthLabels = lastNMonths(months);
   const inputs: HeadlineMonthlyInput[] = [];
   const ethDaily: Array<[string, number]> = [];
+
+  const aave = benchmarks["aave_v3_usdc_supply_apy"] ?? [];
+  const lido = benchmarks["lido_steth_apy"] ?? [];
+  const tbill = benchmarks["fred_dgs3mo"] ?? [];
+  const voo = benchmarks["stooq_voo"] ?? [];
+  const gold = benchmarks["fred_gold_lbma"] ?? [];
+
   for (let i = 0; i < months; i++) {
-    const ym = `2024-${String(i + 1).padStart(2, "0")}`;
+    const ym = monthLabels[i];
     const slice = strategies.slice(
       Math.floor((i / months) * strategies.length),
       Math.floor(((i + 1) / months) * strategies.length),
@@ -448,9 +604,12 @@ function synthesiseHeadlineConfig(
       bestLpReturn: monthlyReturn,
       naiveLpReturn: naive.netReturnUsd / Math.max(1, naive.depositUsd),
       medianLpReturn: median.netReturnUsd / Math.max(1, median.depositUsd),
-      aaveUsdcReturn: 0.005,
-      lidoStethReturn: 0.0035,
+      aaveUsdcReturn: monthlyReturnFromApy(aave, ym),
+      lidoStethReturn: monthlyReturnFromApy(lido, ym),
       hodlReturn: 0.0,
+      sp500Return: monthlyReturnFromPrice(voo, ym),
+      goldReturn: monthlyReturnFromPrice(gold, ym),
+      tbillReturn: monthlyReturnFromApy(tbill, ym),
     });
     for (let d = 1; d <= 28; d++) {
       const date = `${ym}-${String(d).padStart(2, "0")}`;
@@ -466,6 +625,33 @@ function synthesiseHeadlineConfig(
   };
 }
 
+function lastNMonths(n: number): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+function monthlyReturnFromApy(points: BenchmarkPoint[], yearMonth: string): number {
+  const matching = points.filter((p) => p.sample_date.startsWith(yearMonth));
+  if (!matching.length) return 0;
+  const avg = matching.reduce((s, p) => s + p.value, 0) / matching.length;
+  return avg / 1200;
+}
+
+function monthlyReturnFromPrice(points: BenchmarkPoint[], yearMonth: string): number {
+  const sorted = points
+    .filter((p) => p.sample_date.startsWith(yearMonth))
+    .sort((a, b) => a.sample_date.localeCompare(b.sample_date));
+  if (sorted.length < 2) return 0;
+  const first = sorted[0].value;
+  const last = sorted[sorted.length - 1].value;
+  return first > 0 ? (last - first) / first : 0;
+}
+
 function formatError(e: unknown): string {
   if (typeof e === "string") return e;
   if (e instanceof Error) return e.message;
@@ -476,6 +662,7 @@ function formatError(e: unknown): string {
   return String(e);
 }
 
-// Mark referenced helpers as used
+// Keep the unused-import lint quiet for IPC clients reserved for future
+// "load run from history" functionality.
 void lpQueryStrategies;
 void lpQueryHeadlineMonthly;

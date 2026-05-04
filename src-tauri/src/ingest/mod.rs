@@ -18,12 +18,14 @@ pub mod error;
 pub mod mock;
 pub mod pipeline;
 pub mod source;
+pub mod subgraph;
 
 pub use alchemy::AlchemyArchiveSource;
 pub use error::IngestError;
 pub use mock::MockArchiveSource;
 pub use pipeline::{IngestionReport, Ingester};
 pub use source::{ArchiveSource, EthLog};
+pub use subgraph::{PoolMetadata, UniswapV3SubgraphSource};
 
 #[cfg(test)]
 mod tests {
@@ -342,6 +344,9 @@ mod tests {
             token0_decimals: 6,
             token1_decimals: 18,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
 
         let engine = Engine::new(&storage);

@@ -5,6 +5,7 @@ import {
 } from "../../components/blocks/arbitrage/BlockRegistry";
 import type { MarketState } from "../../hooks/useMarketData";
 import type { PnlMode } from "../../lib/arbitrage";
+import { useTelemetrySnapshot } from "../../lib/telemetry";
 
 interface ArbitragePageProps {
   market: MarketState;
@@ -45,6 +46,29 @@ function findBlock(id: string): BlockDefinition | undefined {
 
 export function ArbitragePage({ market, pnlMode }: ArbitragePageProps) {
   const renderProps: BlockRenderProps = { market, pnlMode };
+
+  // Snapshot the visible state so the telemetry log mirrors what's
+  // on screen without screenshots. Heavy structures (full overview
+  // venue array) are reduced to count + first/hero pick.
+  const overview = market.overview;
+  useTelemetrySnapshot("arbitrage", {
+    pnlMode,
+    loading: market.loading,
+    errorMessage: market.errorMessage,
+    heroSnapshot: market.heroSnapshot,
+    overview: overview
+      ? {
+          chain: overview.chain,
+          fetchedAtUnixMs: overview.fetchedAtUnixMs,
+          venuesCount: overview.venues.length,
+          venuesFirst: overview.venues[0] ?? null,
+        }
+      : null,
+    historyCount: market.history?.length ?? 0,
+    historyLast: market.history?.length
+      ? market.history[market.history.length - 1]
+      : null,
+  });
 
   return (
     <div className="dashboard-page">

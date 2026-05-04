@@ -54,6 +54,9 @@ pub async fn round_trip_synthetic_fixtures(
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let out = engine.simulate(config.clone(), RebalanceRule::Static).await?;
         fixtures.push(LpPositionFixture {

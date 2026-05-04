@@ -78,7 +78,15 @@ fn fee_share(
     // 1e6` where fee tiers are stored in "hundredths-of-bps" — i.e. 5bps
     // is stored as 500. We expect callers to pass fee_tier_bps in the
     // "hundredths of bps" convention (500 for 5bps, 3000 for 30bps).
-    let pos_l = BigUint::from(position_liquidity);
+    //
+    // Defensive clamp: in real V3 the position is part of the active
+    // liquidity so `position_L ≤ active_L` is structural. In a backtest
+    // we feed the position alongside an externally-sourced active_L
+    // (live or synthetic) and the invariant has to be enforced in code,
+    // otherwise a mis-calibrated active_L produces fee_share > total_fee
+    // — which has no physical meaning.
+    let effective_pos_l = position_liquidity.min(active_liquidity);
+    let pos_l = BigUint::from(effective_pos_l);
     let active_l = BigUint::from(active_liquidity);
     if active_l.is_zero() {
         return Ok(BigUint::from(0u8));

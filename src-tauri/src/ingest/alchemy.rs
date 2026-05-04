@@ -47,6 +47,19 @@ impl AlchemyArchiveSource {
         })
     }
 
+    /// Builds an archive source pointed at an arbitrary RPC URL — used
+    /// to construct the free public-RPC fallback (LlamaRPC, Ankr,
+    /// Cloudflare) when the user has no Alchemy key and no Graph
+    /// gateway key. Public RPCs typically allow eth_getLogs with
+    /// 500–2000 block ranges; the adaptive chunk-size logic in
+    /// `get_pool_logs` shrinks to 10 blocks on 400/429.
+    pub fn with_rpc_url(url: impl Into<String>) -> Self {
+        Self {
+            client: EthereumRpcClient::new(url),
+            payg_unbounded: false,
+        }
+    }
+
     /// Disable the free-tier 10-block chunking. Set this when running
     /// against PAYG keys; the backfill becomes ~13 seconds instead of
     /// ~50 minutes for a 30-day window.
@@ -81,29 +94,52 @@ impl ArchiveSource for AlchemyArchiveSource {
                 to: to_block,
             });
         }
-        let chunk = self.chunk_size();
+        let topics_json: Vec<Value> = topic0_filters
+            .iter()
+            .map(|t| json!(format!("0x{}", t.trim_start_matches("0x"))))
+            .collect();
+        let topic0_value = if topics_json.is_empty() {
+            Value::Null
+        } else if topics_json.len() == 1 {
+            topics_json[0].clone()
+        } else {
+            Value::Array(topics_json)
+        };
+
+        // Adaptive chunk-size strategy. Big-chunk-first (PAYG-friendly,
+        // ~13s for a month of mainnet) → on transport-level failure
+        // (typically 400 from free-tier range caps, or rate limit),
+        // shrink and retry with the conservative 10-block chunking the
+        // free tier supports. Both succeed for the user without a
+        // manual tier flag.
+        let initial_chunk = self.chunk_size();
+        let mut chunk = initial_chunk;
         let mut out = Vec::new();
         let mut start = from_block;
         while start <= to_block {
             let end = (start + chunk - 1).min(to_block);
-            let topics_json: Vec<Value> = topic0_filters
-                .iter()
-                .map(|t| json!(format!("0x{}", t.trim_start_matches("0x"))))
-                .collect();
-            let topic0_value = if topics_json.is_empty() {
-                Value::Null
-            } else if topics_json.len() == 1 {
-                topics_json[0].clone()
-            } else {
-                Value::Array(topics_json)
-            };
             let params = json!([{
                 "address": pool_address,
                 "fromBlock": format!("0x{:x}", start),
                 "toBlock": format!("0x{:x}", end),
-                "topics": [topic0_value]
+                "topics": [topic0_value.clone()]
             }]);
-            let raw: Value = self.client.rpc_call("eth_getLogs", params).await?;
+            let result = self.client.rpc_call("eth_getLogs", params).await;
+            let raw: Value = match result {
+                Ok(v) => v,
+                Err(e) => {
+                    // If we were trying the optimistic big chunk and
+                    // hit a transport error, drop to free-tier chunking
+                    // and retry the SAME range. Subsequent iterations
+                    // also use the smaller chunk. Only the first failure
+                    // triggers the fallback; we don't recurse.
+                    if chunk > FREE_TIER_LOG_RANGE_CAP {
+                        chunk = FREE_TIER_LOG_RANGE_CAP;
+                        continue;
+                    }
+                    return Err(e.into());
+                }
+            };
             let arr = raw.as_array().ok_or_else(|| {
                 IngestError::MalformedLog("eth_getLogs returned non-array".into())
             })?;

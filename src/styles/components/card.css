@@ -2,6 +2,7 @@
   display: grid;
   grid-template-rows: auto 1fr;
   height: 100%;
+  min-width: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -67,11 +68,16 @@
 }
 
 .card-subtitle {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--text-xs);
   font-weight: 400;
   color: var(--text-muted);
   letter-spacing: 0;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-actions {

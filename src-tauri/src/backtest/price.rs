@@ -59,8 +59,7 @@ pub fn sqrt_price_x96_to_human_price(
 /// `sqrt_price_x96_to_human_price`).
 ///
 /// Returns the USD value assuming token1 is the USD-quote (USDC, USDT,
-/// DAI). For non-USD-quote pairs the caller must apply the appropriate
-/// USD oracle on top.
+/// DAI). For non-USD-quote pairs use `position_usd_value_explicit`.
 pub fn position_usd_value(
     amount0_raw: &BigUint,
     amount1_raw: &BigUint,
@@ -73,6 +72,27 @@ pub fn position_usd_value(
     let a1_human = amount1_raw.to_f64().unwrap_or(0.0)
         / 10f64.powi(decimals_token1 as i32);
     a0_human * price + a1_human
+}
+
+/// USD value computed via per-token USD prices — pool-agnostic.
+/// Used when the caller has external USD feeds for both tokens
+/// (DefiLlama / CoinGecko / oracle), e.g. WBTC/ETH or LDO/ETH where
+/// neither side is USD-pegged. The pool's spot ratio drives WHAT
+/// amounts the position holds at each step (via sqrtPriceX96), but
+/// USD valuation uses the supplied prices.
+pub fn position_usd_value_explicit(
+    amount0_raw: &BigUint,
+    amount1_raw: &BigUint,
+    token0_usd_price: f64,
+    token1_usd_price: f64,
+    decimals_token0: u8,
+    decimals_token1: u8,
+) -> f64 {
+    let a0_human = amount0_raw.to_f64().unwrap_or(0.0)
+        / 10f64.powi(decimals_token0 as i32);
+    let a1_human = amount1_raw.to_f64().unwrap_or(0.0)
+        / 10f64.powi(decimals_token1 as i32);
+    a0_human * token0_usd_price + a1_human * token1_usd_price
 }
 
 #[cfg(test)]

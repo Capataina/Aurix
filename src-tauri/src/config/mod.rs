@@ -16,12 +16,14 @@
 //! `VenueProtocol` in `venues.rs` and add the corresponding adapter dispatch in
 //! `commands/market.rs`.
 
+pub mod chains;
 pub mod pairs;
 pub mod rpc;
 pub mod runtime;
 pub mod tokens;
 pub mod venues;
 
+pub use chains::ChainId;
 pub use pairs::{find_pair, list_pairs, PairConfig, PairSummary};
 pub use rpc::AppConfig;
 pub use runtime::RuntimeConfig;

@@ -9,6 +9,7 @@ use super::error::BacktestError;
 
 /// Configuration for one simulated LP position.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PositionConfig {
     pub pool_address: String,
     pub tick_lower: i32,
@@ -23,6 +24,16 @@ pub struct PositionConfig {
     pub token1_decimals: u8,
     /// MEV haircut bps applied per rebalance leg (per plan paper 11).
     pub mev_haircut_bps: f64,
+    /// Per-token USD prices (DefiLlama). When both are supplied, the
+    /// engine values the position via `a0 * p0_usd + a1 * p1_usd`
+    /// instead of assuming token1 is USD-pegged. Required for non-
+    /// USD-quote pools (WBTC/ETH, LDO/ETH, etc.). Optional for
+    /// backward compat — when missing, the engine falls back to the
+    /// `cur_price` ratio with the token1=USD assumption.
+    #[serde(default)]
+    pub token0_usd_price: Option<f64>,
+    #[serde(default)]
+    pub token1_usd_price: Option<f64>,
 }
 
 impl PositionConfig {

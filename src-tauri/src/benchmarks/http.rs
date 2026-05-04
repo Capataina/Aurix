@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -23,9 +24,18 @@ pub struct ReqwestFetcher {
 
 impl Default for ReqwestFetcher {
     fn default() -> Self {
-        Self {
-            client: Client::new(),
-        }
+        // 15s total timeout, 5s connect timeout. Without these, a slow
+        // upstream (Aave/Lido via DefiLlama have been observed hanging
+        // with no error) blocks Promise.allSettled forever — turning a
+        // single bad benchmark into a stuck pipeline. With timeouts the
+        // hang surfaces as a real Http error and the rest of the
+        // pipeline progresses.
+        let client = Client::builder()
+            .timeout(Duration::from_secs(15))
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+        Self { client }
     }
 }
 

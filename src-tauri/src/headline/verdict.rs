@@ -38,6 +38,16 @@ pub struct HeadlineMonthlyInput {
     pub aave_usdc_return: f64,
     pub lido_steth_return: f64,
     pub hodl_return: f64,
+    /// Per-month return on the S&P 500 (via VOO close-to-close).
+    /// Default 0.0 when the caller has no data for the month.
+    #[serde(default)]
+    pub sp500_return: f64,
+    /// Per-month return on gold (LBMA London PM fix).
+    #[serde(default)]
+    pub gold_return: f64,
+    /// Per-month return on a 3-month T-bill (annualised yield / 12).
+    #[serde(default)]
+    pub tbill_return: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,8 +89,14 @@ impl<'a> HeadlineRunner<'a> {
         // Per-month rows: classify regime, compute spreads.
         let mut rows = Vec::with_capacity(config.monthly_inputs.len());
         let mut months_lp_beat_lending = 0i64;
+        let mut months_lp_beat_sp500 = 0i64;
+        let mut months_lp_beat_gold = 0i64;
+        let mut months_lp_beat_tbill = 0i64;
         let mut spreads_by_regime: std::collections::HashMap<VolRegime, Vec<f64>> =
             std::collections::HashMap::new();
+        let mut sp500_spreads: Vec<f64> = Vec::new();
+        let mut gold_spreads: Vec<f64> = Vec::new();
+        let mut tbill_spreads: Vec<f64> = Vec::new();
 
         for input in &config.monthly_inputs {
             let (eth_vol, regime) = vol_by_ym
@@ -97,6 +113,30 @@ impl<'a> HeadlineRunner<'a> {
                 .or_default()
                 .push(spread);
 
+            // Multi-asset comparisons. Only count months where the
+            // benchmark has a non-zero value (zero means "no data").
+            if input.sp500_return.abs() > f64::EPSILON {
+                let s = input.best_lp_return - input.sp500_return;
+                sp500_spreads.push(s);
+                if s > 0.0 {
+                    months_lp_beat_sp500 += 1;
+                }
+            }
+            if input.gold_return.abs() > f64::EPSILON {
+                let s = input.best_lp_return - input.gold_return;
+                gold_spreads.push(s);
+                if s > 0.0 {
+                    months_lp_beat_gold += 1;
+                }
+            }
+            if input.tbill_return.abs() > f64::EPSILON {
+                let s = input.best_lp_return - input.tbill_return;
+                tbill_spreads.push(s);
+                if s > 0.0 {
+                    months_lp_beat_tbill += 1;
+                }
+            }
+
             rows.push(HeadlineMonthlyRow {
                 year_month: input.year_month.clone(),
                 vol_regime: regime.label().to_string(),
@@ -106,6 +146,9 @@ impl<'a> HeadlineRunner<'a> {
                 aave_usdc_return: input.aave_usdc_return,
                 lido_steth_return: input.lido_steth_return,
                 hodl_return: input.hodl_return,
+                sp500_return: input.sp500_return,
+                gold_return: input.gold_return,
+                tbill_return: input.tbill_return,
                 eth_vol_30d: eth_vol,
             });
         }
@@ -113,15 +156,24 @@ impl<'a> HeadlineRunner<'a> {
         let median_low = median_or_none(spreads_by_regime.get(&VolRegime::Low));
         let median_med = median_or_none(spreads_by_regime.get(&VolRegime::Medium));
         let median_high = median_or_none(spreads_by_regime.get(&VolRegime::High));
+        let median_sp500 = median_or_none(Some(&sp500_spreads));
+        let median_gold = median_or_none(Some(&gold_spreads));
+        let median_tbill = median_or_none(Some(&tbill_spreads));
 
         let total_months = rows.len() as i64;
         let verdict_text = build_verdict(
             &config.pool_address,
             months_lp_beat_lending,
+            months_lp_beat_sp500,
+            months_lp_beat_gold,
+            months_lp_beat_tbill,
             total_months,
             median_low,
             median_med,
             median_high,
+            median_sp500,
+            median_gold,
+            median_tbill,
         );
 
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -131,10 +183,16 @@ impl<'a> HeadlineRunner<'a> {
             lookback_months: config.lookback_months,
             regime_method: "adaptive_terciles".to_string(),
             months_lp_beat_lending,
+            months_lp_beat_sp500,
+            months_lp_beat_gold,
+            months_lp_beat_tbill,
             months_total: total_months,
             median_low_vol_spread: median_low,
             median_med_vol_spread: median_med,
             median_high_vol_spread: median_high,
+            median_sp500_spread: median_sp500,
+            median_gold_spread: median_gold,
+            median_tbill_spread: median_tbill,
             verdict_text,
             completed_at_unix_ms: now_ms,
         };
@@ -150,19 +208,46 @@ impl<'a> HeadlineRunner<'a> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_verdict(
     pool: &str,
-    won_months: i64,
+    won_lending: i64,
+    won_sp500: i64,
+    won_gold: i64,
+    won_tbill: i64,
     total: i64,
     low: Option<f64>,
     med: Option<f64>,
     high: Option<f64>,
+    sp500: Option<f64>,
+    gold: Option<f64>,
+    tbill: Option<f64>,
 ) -> String {
-    let won = won_months;
-    let lost = total - won_months;
     let mut s = format!(
-        "WETH/USDC LP ({pool}) outperformed stable lending in {won} of {total} months."
+        "LP ({pool}) outperformed stable lending in {won_lending} of {total} months."
     );
+
+    // Per-asset month counts: only render the line when the benchmark
+    // had any data (months won + spread populated).
+    if sp500.is_some() {
+        s.push_str(&format!(
+            " Beat S&P 500 in {won_sp500}/{total}; median spread {:+.2} pp/mo.",
+            sp500.unwrap_or(0.0) * 100.0
+        ));
+    }
+    if gold.is_some() {
+        s.push_str(&format!(
+            " Beat gold in {won_gold}/{total}; median spread {:+.2} pp/mo.",
+            gold.unwrap_or(0.0) * 100.0
+        ));
+    }
+    if tbill.is_some() {
+        s.push_str(&format!(
+            " Beat 3-mo T-bill in {won_tbill}/{total}; median spread {:+.2} pp/mo.",
+            tbill.unwrap_or(0.0) * 100.0
+        ));
+    }
+
     if let Some(h) = high {
         s.push_str(&format!(
             " High-vol regime: median spread {:+.2} pp/mo.",
@@ -181,9 +266,10 @@ fn build_verdict(
             l * 100.0
         ));
     }
-    if won > total - won {
+
+    if won_lending > total - won_lending {
         s.push_str(" Conclusion: V3 LP on this pair was the better default over the lookback.");
-    } else if won < total - won {
+    } else if won_lending < total - won_lending {
         let losses_high = high.unwrap_or(0.0) < 0.0;
         let losses_low = low.unwrap_or(0.0) < 0.0;
         if losses_low && !losses_high {
@@ -192,7 +278,6 @@ fn build_verdict(
             s.push_str(" Conclusion: stable lending was the better default over the lookback.");
         }
     }
-    let _ = lost;
     s
 }
 
@@ -246,6 +331,9 @@ mod tests {
                 aave_usdc_return: 0.005,
                 lido_steth_return: 0.003,
                 hodl_return: 0.0,
+                sp500_return: 0.0,
+                gold_return: 0.0,
+                tbill_return: 0.0,
             });
             for d in 1..=28 {
                 let date = format!("2024-{:02}-{:02}", i + 1, d);
@@ -294,6 +382,9 @@ mod tests {
                 aave_usdc_return: 0.0,
                 lido_steth_return: 0.0,
                 hodl_return: 0.0,
+                sp500_return: 0.0,
+                gold_return: 0.0,
+                tbill_return: 0.0,
             }],
             eth_daily_returns: Vec::new(),
         };

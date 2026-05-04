@@ -126,6 +126,9 @@ impl<'a> GridRunner<'a> {
                             token0_decimals: config.token0_decimals,
                             token1_decimals: config.token1_decimals,
                             mev_haircut_bps: config.mev_haircut_bps,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
                         };
                         let out = match engine
                             .simulate(position_config.clone(), rule.clone())

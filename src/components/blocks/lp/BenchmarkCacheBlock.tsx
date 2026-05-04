@@ -14,7 +14,8 @@ const KNOWN_SERIES: Array<{ key: string; label: string; tone: "accent" | "info" 
   { key: "aave_v3_usdc_supply_apy", label: "Aave V3 USDC", tone: "accent" },
   { key: "lido_steth_apy", label: "Lido stETH", tone: "info" },
   { key: "fred_dgs3mo", label: "3-mo T-bill", tone: "warn" },
-  { key: "stooq_voo", label: "VOO", tone: "up" },
+  { key: "stooq_voo", label: "S&P 500 (VOO)", tone: "up" },
+  { key: "fred_gold_lbma", label: "Gold (LBMA)", tone: "warn" },
 ];
 
 export function BenchmarkCacheBlock({

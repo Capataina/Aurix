@@ -14,10 +14,16 @@ pub struct HeadlineRunSummary {
     pub lookback_months: i64,
     pub regime_method: String,
     pub months_lp_beat_lending: i64,
+    pub months_lp_beat_sp500: i64,
+    pub months_lp_beat_gold: i64,
+    pub months_lp_beat_tbill: i64,
     pub months_total: i64,
     pub median_low_vol_spread: Option<f64>,
     pub median_med_vol_spread: Option<f64>,
     pub median_high_vol_spread: Option<f64>,
+    pub median_sp500_spread: Option<f64>,
+    pub median_gold_spread: Option<f64>,
+    pub median_tbill_spread: Option<f64>,
     pub verdict_text: String,
     pub completed_at_unix_ms: i64,
 }
@@ -33,6 +39,9 @@ pub struct HeadlineMonthlyRow {
     pub aave_usdc_return: f64,
     pub lido_steth_return: f64,
     pub hodl_return: f64,
+    pub sp500_return: f64,
+    pub gold_return: f64,
+    pub tbill_return: f64,
     pub eth_vol_30d: f64,
 }
 
@@ -60,20 +69,28 @@ impl Storage {
                     tx.execute(
                         "INSERT INTO headline_runs
                          (config_hash, pool_address, lookback_months, regime_method,
-                          months_lp_beat_lending, months_total,
+                          months_lp_beat_lending, months_lp_beat_sp500,
+                          months_lp_beat_gold, months_lp_beat_tbill, months_total,
                           median_low_vol_spread, median_med_vol_spread, median_high_vol_spread,
+                          median_sp500_spread, median_gold_spread, median_tbill_spread,
                           verdict_text, completed_at_unix_ms)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
                         params![
                             summary.config_hash,
                             summary.pool_address,
                             summary.lookback_months,
                             summary.regime_method,
                             summary.months_lp_beat_lending,
+                            summary.months_lp_beat_sp500,
+                            summary.months_lp_beat_gold,
+                            summary.months_lp_beat_tbill,
                             summary.months_total,
                             summary.median_low_vol_spread,
                             summary.median_med_vol_spread,
                             summary.median_high_vol_spread,
+                            summary.median_sp500_spread,
+                            summary.median_gold_spread,
+                            summary.median_tbill_spread,
                             summary.verdict_text,
                             summary.completed_at_unix_ms,
                         ],
@@ -85,8 +102,9 @@ impl Storage {
                             "INSERT INTO headline_monthly
                              (headline_run_id, year_month, vol_regime,
                               best_lp_return, naive_lp_return, median_lp_return,
-                              aave_usdc_return, lido_steth_return, hodl_return, eth_vol_30d)
-                             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                              aave_usdc_return, lido_steth_return, hodl_return,
+                              sp500_return, gold_return, tbill_return, eth_vol_30d)
+                             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                         )?;
                         for m in monthly.iter() {
                             stmt.execute(params![
@@ -99,6 +117,9 @@ impl Storage {
                                 m.aave_usdc_return,
                                 m.lido_steth_return,
                                 m.hodl_return,
+                                m.sp500_return,
+                                m.gold_return,
+                                m.tbill_return,
                                 m.eth_vol_30d,
                             ])?;
                         }
@@ -123,8 +144,10 @@ impl Storage {
             let row = conn
                 .query_row(
                     "SELECT config_hash, pool_address, lookback_months, regime_method,
-                            months_lp_beat_lending, months_total,
+                            months_lp_beat_lending, months_lp_beat_sp500,
+                            months_lp_beat_gold, months_lp_beat_tbill, months_total,
                             median_low_vol_spread, median_med_vol_spread, median_high_vol_spread,
+                            median_sp500_spread, median_gold_spread, median_tbill_spread,
                             verdict_text, completed_at_unix_ms
                      FROM headline_runs WHERE config_hash = ?1",
                     params![config_hash],
@@ -135,12 +158,18 @@ impl Storage {
                             lookback_months: row.get(2)?,
                             regime_method: row.get(3)?,
                             months_lp_beat_lending: row.get(4)?,
-                            months_total: row.get(5)?,
-                            median_low_vol_spread: row.get(6)?,
-                            median_med_vol_spread: row.get(7)?,
-                            median_high_vol_spread: row.get(8)?,
-                            verdict_text: row.get(9)?,
-                            completed_at_unix_ms: row.get(10)?,
+                            months_lp_beat_sp500: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                            months_lp_beat_gold: row.get::<_, Option<i64>>(6)?.unwrap_or(0),
+                            months_lp_beat_tbill: row.get::<_, Option<i64>>(7)?.unwrap_or(0),
+                            months_total: row.get(8)?,
+                            median_low_vol_spread: row.get(9)?,
+                            median_med_vol_spread: row.get(10)?,
+                            median_high_vol_spread: row.get(11)?,
+                            median_sp500_spread: row.get(12)?,
+                            median_gold_spread: row.get(13)?,
+                            median_tbill_spread: row.get(14)?,
+                            verdict_text: row.get(15)?,
+                            completed_at_unix_ms: row.get(16)?,
                         })
                     },
                 )
@@ -162,7 +191,8 @@ impl Storage {
             let mut stmt = conn.prepare(
                 "SELECT year_month, vol_regime,
                         best_lp_return, naive_lp_return, median_lp_return,
-                        aave_usdc_return, lido_steth_return, hodl_return, eth_vol_30d
+                        aave_usdc_return, lido_steth_return, hodl_return,
+                        sp500_return, gold_return, tbill_return, eth_vol_30d
                  FROM headline_monthly
                  WHERE headline_run_id = (SELECT id FROM headline_runs WHERE config_hash = ?1)
                  ORDER BY year_month ASC",
@@ -177,7 +207,10 @@ impl Storage {
                     aave_usdc_return: row.get(5)?,
                     lido_steth_return: row.get(6)?,
                     hodl_return: row.get(7)?,
-                    eth_vol_30d: row.get(8)?,
+                    sp500_return: row.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
+                    gold_return: row.get::<_, Option<f64>>(9)?.unwrap_or(0.0),
+                    tbill_return: row.get::<_, Option<f64>>(10)?.unwrap_or(0.0),
+                    eth_vol_30d: row.get(11)?,
                 })
             })?;
             let mut rows = Vec::new();

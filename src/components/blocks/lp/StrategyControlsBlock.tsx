@@ -124,10 +124,14 @@ export function StrategyControlsBlock({
     return <div className="ctrl-arg-spacer" />;
   })();
 
+  const subtitle = busy
+    ? "running…"
+    : truncate(status || "auto-runs on load", 56);
+
   return (
     <Card
       title="Controls"
-      subtitle={busy ? "running…" : status || "auto-runs on load"}
+      subtitle={subtitle}
       onRemove={onRemove}
       headerExtra={
         status ? (
@@ -288,6 +292,10 @@ export function StrategyControlsBlock({
       </div>
     </Card>
   );
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
 interface NumberStepperProps {

@@ -15,6 +15,11 @@ export interface PositionConfig {
   token0Decimals: number;
   token1Decimals: number;
   mevHaircutBps: number;
+  /** Per-token USD prices (DefiLlama). Optional — when both are
+   *  supplied, the engine values the position via per-token feeds
+   *  instead of assuming token1 is USD-pegged. */
+  token0UsdPrice?: number | null;
+  token1UsdPrice?: number | null;
 }
 
 export type RebalanceRule =
@@ -126,6 +131,29 @@ export interface HeadlineMonthlyInput {
   aaveUsdcReturn: number;
   lidoStethReturn: number;
   hodlReturn: number;
+  sp500Return: number;
+  goldReturn: number;
+  tbillReturn: number;
+}
+
+export interface FirstSwapInfo {
+  blockNumber: number;
+  blockTimestamp: number;
+  tick: number;
+  sqrtPriceX96: string;
+  humanPrice: number;
+}
+
+export interface PoolMetadata {
+  poolAddress: string;
+  token0Address: string;
+  token0Symbol: string;
+  token0Decimals: number;
+  token1Address: string;
+  token1Symbol: string;
+  token1Decimals: number;
+  feeTierBps: number;
+  isToken1UsdPegged: boolean;
 }
 
 export interface HeadlineConfig {
@@ -136,17 +164,23 @@ export interface HeadlineConfig {
 }
 
 export interface HeadlineRunSummary {
-  config_hash: string;
-  pool_address: string;
-  lookback_months: number;
-  regime_method: string;
-  months_lp_beat_lending: number;
-  months_total: number;
-  median_low_vol_spread: number | null;
-  median_med_vol_spread: number | null;
-  median_high_vol_spread: number | null;
-  verdict_text: string;
-  completed_at_unix_ms: number;
+  configHash: string;
+  poolAddress: string;
+  lookbackMonths: number;
+  regimeMethod: string;
+  monthsLpBeatLending: number;
+  monthsLpBeatSp500: number;
+  monthsLpBeatGold: number;
+  monthsLpBeatTbill: number;
+  monthsTotal: number;
+  medianLowVolSpread: number | null;
+  medianMedVolSpread: number | null;
+  medianHighVolSpread: number | null;
+  medianSp500Spread: number | null;
+  medianGoldSpread: number | null;
+  medianTbillSpread: number | null;
+  verdictText: string;
+  completedAtUnixMs: number;
 }
 
 export interface HeadlineMonthlyRow {
@@ -158,6 +192,9 @@ export interface HeadlineMonthlyRow {
   aaveUsdcReturn: number;
   lidoStethReturn: number;
   hodlReturn: number;
+  sp500Return: number;
+  goldReturn: number;
+  tbillReturn: number;
   ethVol30d: number;
 }
 

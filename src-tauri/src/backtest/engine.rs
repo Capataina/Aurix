@@ -25,7 +25,7 @@ use super::metrics::{
     sortino_ratio,
 };
 use super::position::PositionConfig;
-use super::price::{position_usd_value, sqrt_price_x96_to_human_price};
+use super::price::{position_usd_value, position_usd_value_explicit, sqrt_price_x96_to_human_price};
 use super::rebalance::{RebalanceContext, RebalanceRule};
 
 /// Simulation output: persisted summary + full equity curve.
@@ -101,13 +101,32 @@ impl<'a> Engine<'a> {
         // then revalue at every step.
         let hold_amount0 = deposit0.clone();
         let hold_amount1 = deposit1.clone();
-        let entry_position_usd = position_usd_value(
-            &deposit0,
-            &deposit1,
-            entry_price,
-            config.token0_decimals,
-            config.token1_decimals,
-        );
+        // Closure that picks between the pool-ratio-based USD valuation
+        // (assumes token1 is USD-pegged) and the explicit per-token
+        // USD valuation (works for any pair). When both USD prices
+        // are configured, the explicit path takes over for *every*
+        // USD calc downstream — fees, IL, hold-only, position value,
+        // gas — so the entire dashboard is internally consistent.
+        let value_usd = |a0: &BigUint, a1: &BigUint, ratio: f64| -> f64 {
+            match (config.token0_usd_price, config.token1_usd_price) {
+                (Some(p0), Some(p1)) => position_usd_value_explicit(
+                    a0,
+                    a1,
+                    p0,
+                    p1,
+                    config.token0_decimals,
+                    config.token1_decimals,
+                ),
+                _ => position_usd_value(
+                    a0,
+                    a1,
+                    ratio,
+                    config.token0_decimals,
+                    config.token1_decimals,
+                ),
+            }
+        };
+        let entry_position_usd = value_usd(&deposit0, &deposit1, entry_price);
 
         // Running aggregates.
         let mut fees_token0_acc = BigUint::from(0u8);
@@ -199,13 +218,7 @@ impl<'a> Engine<'a> {
                 // MEV haircut on the rebalance leg, if configured.
                 let (a0_now, a1_now) =
                     amounts_for_liquidity(&cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
-                let position_value_now = position_usd_value(
-                    &a0_now,
-                    &a1_now,
-                    cur_price,
-                    config.token0_decimals,
-                    config.token1_decimals,
-                );
+                let position_value_now = value_usd(&a0_now, &a1_now, cur_price);
                 if config.mev_haircut_bps > 0.0 {
                     mgmt_gas_acc_usd +=
                         mev_haircut_usd(position_value_now, config.mev_haircut_bps);
@@ -232,31 +245,20 @@ impl<'a> Engine<'a> {
             // Position USD value at this step.
             let (a0_cur, a1_cur) =
                 amounts_for_liquidity(&cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
-            let raw_position_value = position_usd_value(
-                &a0_cur,
-                &a1_cur,
-                cur_price,
-                config.token0_decimals,
-                config.token1_decimals,
-            );
-            let fees_usd = position_usd_value(
-                &fees_token0_acc,
-                &fees_token1_acc,
-                cur_price,
-                config.token0_decimals,
-                config.token1_decimals,
-            );
+            let raw_position_value = value_usd(&a0_cur, &a1_cur, cur_price);
+            let fees_usd = value_usd(&fees_token0_acc, &fees_token1_acc, cur_price);
             let position_value_usd = raw_position_value + fees_usd;
 
             // Hold-only revalued at this step.
-            let hold_only_usd = position_usd_value(
-                &hold_amount0,
-                &hold_amount1,
-                cur_price,
-                config.token0_decimals,
-                config.token1_decimals,
-            );
-            let il_usd = position_value_usd - hold_only_usd;
+            let hold_only_usd = value_usd(&hold_amount0, &hold_amount1, cur_price);
+            // Impermanent loss = LP token value (excluding fees earned)
+            // minus the hold-only baseline. Negative when the LP is
+            // worse off than holding both tokens 50/50 at the same
+            // price. Positive only if the LP rebalanced into the
+            // appreciating asset — uncommon for V3 LPs without fees.
+            // Fees are accounted separately so the user can see the
+            // gross fee earnings vs the gross IL drag, then net them.
+            let il_usd = raw_position_value - hold_only_usd;
             let net_pnl_usd = position_value_usd - entry_position_usd - mgmt_gas_acc_usd;
 
             equity_points.push(EquityCurvePoint {

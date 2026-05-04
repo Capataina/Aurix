@@ -64,6 +64,11 @@ pub fn run() {
             commands::lp::lp_fetch_benchmark_series,
             commands::lp::lp_query_benchmark_range,
             commands::lp::lp_get_chain_head,
+            commands::lp::lp_query_first_swap_price,
+            commands::lp::lp_pool_metadata,
+            commands::lp::lp_token_usd_prices,
+            commands::telemetry::telemetry_log_path,
+            commands::telemetry::telemetry_persist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

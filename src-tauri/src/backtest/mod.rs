@@ -131,6 +131,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let out = engine
@@ -164,6 +167,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 5.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let out1 = engine
@@ -196,6 +202,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let r = engine.simulate(config, RebalanceRule::Static).await;
@@ -217,6 +226,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let r = engine.simulate(config, RebalanceRule::Static).await;
@@ -239,6 +251,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let out = engine
@@ -276,6 +291,9 @@ mod tests {
             token0_decimals: 18,
             token1_decimals: 6,
             mev_haircut_bps: 0.0,
+            token0_usd_price: None,
+            token1_usd_price: None,
+
         };
         let engine = Engine::new(&storage);
         let out = engine

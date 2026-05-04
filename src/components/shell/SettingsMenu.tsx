@@ -5,6 +5,10 @@ import {
   HISTORY_LIMIT_OPTIONS,
   type HistoryLimit,
 } from "../../hooks/useMarketData";
+import {
+  LpSettingsForm,
+  type LpSettings,
+} from "../../features/lp-backtest/LpSettingsForm";
 
 export type StaleThresholdMs = 4000 | 8000 | 16000;
 export const STALE_THRESHOLD_OPTIONS: StaleThresholdMs[] = [4000, 8000, 16000];
@@ -12,6 +16,8 @@ export const STALE_THRESHOLD_OPTIONS: StaleThresholdMs[] = [4000, 8000, 16000];
 interface SettingsMenuProps {
   open: boolean;
   onClose: () => void;
+  /** Which page is active — settings menu routes its content by this. */
+  activeTabId: string;
   /** Available venues for the active pair. Used to populate the hero
    *  selector. */
   venues: PriceSnapshot[];
@@ -22,11 +28,17 @@ interface SettingsMenuProps {
   onSelectHistoryLimit: (limit: HistoryLimit) => void;
   staleThresholdMs: StaleThresholdMs;
   onSelectStaleThreshold: (ms: StaleThresholdMs) => void;
+  /** LP-page settings — only consulted when activeTabId === "lp-backtester". */
+  lpSettings: LpSettings;
+  onChangeLpSettings: (next: LpSettings) => void;
+  onLpRerun: () => void;
+  lpBusy: boolean;
 }
 
 export function SettingsMenu({
   open,
   onClose,
+  activeTabId,
   venues,
   heroVenueDexName,
   onSelectHero,
@@ -34,6 +46,10 @@ export function SettingsMenu({
   onSelectHistoryLimit,
   staleThresholdMs,
   onSelectStaleThreshold,
+  lpSettings,
+  onChangeLpSettings,
+  onLpRerun,
+  lpBusy,
 }: SettingsMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -67,6 +83,8 @@ export function SettingsMenu({
 
   if (!open) return null;
 
+  const isLpPage = activeTabId === "lp-backtester";
+
   return (
     <div
       ref={menuRef}
@@ -75,53 +93,66 @@ export function SettingsMenu({
       aria-label="Application settings"
     >
       <header className="settings-menu-header">
-        <span className="settings-menu-title">Settings</span>
+        <span className="settings-menu-title">
+          {isLpPage ? "LP Backtester · settings" : "Arbitrage · settings"}
+        </span>
         <span className="settings-menu-hint">applies live · persisted</span>
       </header>
 
-      <Section label="Hero venue" hint="Which venue's price is the headline reading">
-        <div className="settings-options">
-          <SettingsOption
-            label="Auto (first)"
-            active={heroVenueDexName === null}
-            onClick={() => onSelectHero(null)}
-          />
-          {venues.map((venue) => (
-            <SettingsOption
-              key={venue.dexName}
-              label={venue.dexName}
-              active={heroVenueDexName === venue.dexName}
-              onClick={() => onSelectHero(venue.dexName)}
-            />
-          ))}
-        </div>
-      </Section>
+      {isLpPage ? (
+        <LpSettingsForm
+          settings={lpSettings}
+          onChange={onChangeLpSettings}
+          onRerun={onLpRerun}
+          busy={lpBusy}
+        />
+      ) : (
+        <>
+          <Section label="Hero venue" hint="Which venue's price is the headline reading">
+            <div className="settings-options">
+              <SettingsOption
+                label="Auto (first)"
+                active={heroVenueDexName === null}
+                onClick={() => onSelectHero(null)}
+              />
+              {venues.map((venue) => (
+                <SettingsOption
+                  key={venue.dexName}
+                  label={venue.dexName}
+                  active={heroVenueDexName === venue.dexName}
+                  onClick={() => onSelectHero(venue.dexName)}
+                />
+              ))}
+            </div>
+          </Section>
 
-      <Section label="History buffer" hint="Rolling window for chart + stats">
-        <div className="settings-options is-row">
-          {HISTORY_LIMIT_OPTIONS.map((opt) => (
-            <SettingsOption
-              key={opt}
-              label={`${opt}`}
-              active={historyLimit === opt}
-              onClick={() => onSelectHistoryLimit(opt)}
-            />
-          ))}
-        </div>
-      </Section>
+          <Section label="History buffer" hint="Rolling window for chart + stats">
+            <div className="settings-options is-row">
+              {HISTORY_LIMIT_OPTIONS.map((opt) => (
+                <SettingsOption
+                  key={opt}
+                  label={`${opt}`}
+                  active={historyLimit === opt}
+                  onClick={() => onSelectHistoryLimit(opt)}
+                />
+              ))}
+            </div>
+          </Section>
 
-      <Section label="Stale threshold" hint="When the connection turns yellow">
-        <div className="settings-options is-row">
-          {STALE_THRESHOLD_OPTIONS.map((ms) => (
-            <SettingsOption
-              key={ms}
-              label={`${ms / 1000}s`}
-              active={staleThresholdMs === ms}
-              onClick={() => onSelectStaleThreshold(ms)}
-            />
-          ))}
-        </div>
-      </Section>
+          <Section label="Stale threshold" hint="When the connection turns yellow">
+            <div className="settings-options is-row">
+              {STALE_THRESHOLD_OPTIONS.map((ms) => (
+                <SettingsOption
+                  key={ms}
+                  label={`${ms / 1000}s`}
+                  active={staleThresholdMs === ms}
+                  onClick={() => onSelectStaleThreshold(ms)}
+                />
+              ))}
+            </div>
+          </Section>
+        </>
+      )}
     </div>
   );
 }

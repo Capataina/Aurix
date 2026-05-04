@@ -20,7 +20,7 @@ pub use defi::{
 pub use error::BenchmarkError;
 pub use http::{HttpFetcher, MockHttpFetcher, ReqwestFetcher};
 pub use tradfi::{
-    TradFiProvider, FRED_DGS1_URL, FRED_DGS3MO_URL, FRED_GOLD_LBMA_URL, STOOQ_VOO_URL,
-    STOOQ_XAUUSD_URL,
+    TradFiProvider, FRED_DGS1_URL, FRED_DGS3MO_URL, FRED_GOLD_LBMA_URL, FRED_SP500_URL,
+    STOOQ_VOO_URL, STOOQ_XAUUSD_URL,
 };
 pub use v2lp::{hodl_equity_series, v2_lp_equity_series};

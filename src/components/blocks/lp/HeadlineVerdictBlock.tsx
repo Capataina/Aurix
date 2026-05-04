@@ -32,8 +32,8 @@ export function HeadlineVerdictBlock({
     );
   }
 
-  const won = summary.months_lp_beat_lending;
-  const total = summary.months_total;
+  const won = summary.monthsLpBeatLending;
+  const total = summary.monthsTotal;
   const winRatePct = total > 0 ? (won / total) * 100 : 0;
 
   // Tone from win-rate: > 60% LP wins → up, 40-60 neutral, < 40 down.
@@ -46,7 +46,7 @@ export function HeadlineVerdictBlock({
   return (
     <Card
       title="Verdict"
-      subtitle={`${summary.regime_method.replace("_", " ")} · ${total}-month lookback`}
+      subtitle={`${summary.regimeMethod.replace("_", " ")} · ${total}-month lookback`}
       onRemove={onRemove}
       headerExtra={
         <StatusGlyph level={severity} tone={tone === "up" ? "up" : tone === "down" ? "down" : "neutral"} total={4} />
@@ -78,20 +78,20 @@ export function HeadlineVerdictBlock({
         <div className="verdict-regime-grid">
           <RegimeCell
             label="Low vol"
-            value={summary.median_low_vol_spread}
+            value={summary.medianLowVolSpread}
           />
           <RegimeCell
             label="Mid vol"
-            value={summary.median_med_vol_spread}
+            value={summary.medianMedVolSpread}
           />
           <RegimeCell
             label="High vol"
-            value={summary.median_high_vol_spread}
+            value={summary.medianHighVolSpread}
             highlight
           />
         </div>
 
-        <p className="verdict-prose">{summary.verdict_text}</p>
+        <p className="verdict-prose">{summary.verdictText}</p>
       </div>
     </Card>
   );

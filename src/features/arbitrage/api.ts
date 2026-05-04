@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { loggedInvoke } from "../../lib/telemetry";
 
 import type { MarketOverview, PairSummary } from "./types";
 
@@ -8,7 +8,7 @@ import type { MarketOverview, PairSummary } from "./types";
  * every registered venue.
  */
 export function fetchMarketOverview(pairId: string): Promise<MarketOverview> {
-  return invoke<MarketOverview>("fetch_market_overview", { pairId });
+  return loggedInvoke<MarketOverview>("fetch_market_overview", { pairId });
 }
 
 /**
@@ -16,5 +16,5 @@ export function fetchMarketOverview(pairId: string): Promise<MarketOverview> {
  * Called once at app startup to populate the pair selector.
  */
 export function listPairs(): Promise<PairSummary[]> {
-  return invoke<PairSummary[]>("list_pairs");
+  return loggedInvoke<PairSummary[]>("list_pairs");
 }

@@ -14,10 +14,15 @@ export const DEFAULT_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
 export const DEFAULT_FROM_BLOCK = 1_000;
 export const DEFAULT_TO_BLOCK = 2_000;
 
-/** ±300 ticks ≈ ±3% range on price. Sits well inside the synthetic
- *  walk's [-300, +300] envelope so time-in-range stays high. */
-export const DEFAULT_TICK_LOWER = -300;
-export const DEFAULT_TICK_UPPER = 300;
+/** Half-width of the position's tick range (in ticks ≈ basis points
+ *  on price). The auto-run pipeline derives the actual `tickLower`
+ *  and `tickUpper` by reading the first swap's tick from the DB after
+ *  ingest, then anchoring `± DEFAULT_TICK_HALF_WIDTH` around it. The
+ *  literal numbers below are placeholders until the first-swap query
+ *  resolves — they are overwritten before any backtest runs. */
+export const DEFAULT_TICK_HALF_WIDTH = 300;
+export const DEFAULT_TICK_LOWER = -DEFAULT_TICK_HALF_WIDTH;
+export const DEFAULT_TICK_UPPER = DEFAULT_TICK_HALF_WIDTH;
 
 export const DEFAULT_DEPOSIT_USD = 10_000;
 export const DEFAULT_FEE_TIER_BPS = 5;
