@@ -12,12 +12,13 @@
 
 ## Current Implemented Reality
 
-- `src/App.tsx` mounts one feature page and does not provide routing, tab navigation, or a broader application shell abstraction.
-- `src-tauri/src/lib.rs` registers a single IPC command, `fetch_market_overview`, and initialises only the opener plugin.
-- `src-tauri/src/config.rs` resolves the backend RPC endpoint from `MAINNET_RPC_URL` first, then falls back to constructing an Alchemy mainnet URL from `ALCHEMY_API_KEY`.
+- `src/App.tsx` is the top-level application root; routes between Tab 1 (Arbitrage) and Tab 2 (LP Backtest) via the `TopBar` shell. The 2026-05-03 sprint introduced the multi-tab shell with route-aware `SettingsMenu`.
+- `src-tauri/src/lib.rs` registers **19 IPC commands** across three command modules (`commands::market` for Tab 1, `commands::lp` for Tab 2's backtest pipeline, `commands::telemetry` for the cross-cutting recorder). The Tauri builder also `manage()`s an `Arc<Storage>` initialised at startup via `tokio::Builder::new_multi_thread()` + `block_on(open_storage())`.
+- `src-tauri/src/config/` is now a folder (was a single file pre-sprint) with `mod.rs` (env-resolution + `AppConfig`) + `chains.rs` (`ChainId` + `Protocol` + per-chain subgraph URLs / public RPCs / block times for Ethereum / Arbitrum / Optimism / Base / Polygon).
 - The dotenv bootstrap is process-wide and one-time, using `.env` in the backend directory and `../.env` as a fallback path.
-- `src-tauri/src/ethereum/client.rs` provides the shared read-only JSON-RPC client with `eth_call` and `eth_gasPrice` support.
-- `src-tauri/src/market/types.rs` defines the serialised `PriceSnapshot` and `MarketOverview` payloads, and `src/features/arbitrage/types.ts` mirrors those fields on the frontend.
+- `src-tauri/src/ethereum/client.rs` provides the shared read-only JSON-RPC client with `eth_call` and `eth_gasPrice` support — used by Tab 1 and as a fallback transport for Tab 2's archive ingest path 3 (free public RPC).
+- **Storage handle** initialised at startup (`lib.rs::open_storage`) at `~/.aurix/aurix.sqlite` (override via `AURIX_DB_PATH`). See [storage](storage.md) for full details. The handle is registered as Tauri-managed state and is reachable from every Tauri command via `State<'_, Arc<Storage>>`.
+- `src-tauri/src/market/types.rs` still defines the Tab 1 `PriceSnapshot` and `MarketOverview` payloads. Tab 2's payload types live alongside their owning subsystem (per the convention in [storage](storage.md), [backtest](backtest.md), [strategies](strategies.md), [headline](headline.md)) — no central types module for Tab 2.
 
 ## Key Interfaces / Data Flow
 
@@ -72,7 +73,7 @@ The runtime substrate below the feature layer is a narrow line:
 
 ## Partial / In Progress
 
-- The current runtime foundation is sufficient for one feature, but it has not yet been generalised into reusable command boundaries for additional tabs.
+- The runtime foundation generalised into multi-tab + multi-command surface in the 2026-05-03 sprint. Both Tab 1 (Arbitrage) and Tab 2 (LP Backtest) now share the same Storage handle + telemetry recorder.
 - The Tauri layer is functional rather than product-polished; the opener plugin is configured even though the current UI does not appear to expose opener-driven behaviour.
 
 ## Planned / Missing / Likely Changes
@@ -93,4 +94,4 @@ The runtime substrate below the feature layer is a narrow line:
 ## Obsolete / No Longer Relevant
 
 - The default Tauri greeting scaffold is no longer part of the runtime structure.
-- Describing Aurix as a generic multi-tab platform today would be inaccurate; the codebase currently exposes one feature path only.
+- The pre-2026-05-03 single-feature framing ("Aurix exposes one feature path only") is no longer accurate. Tab 2 (LP Backtest) shipped in the same sprint that brought the entire Vector A backend stack — see [storage](storage.md), [backtest](backtest.md), [ingest](ingest.md), [strategies](strategies.md), [benchmarks](benchmarks.md), [headline](headline.md), [validation](validation.md), [math](math.md), [lp-backtest-gui](lp-backtest-gui.md), [telemetry](telemetry.md).

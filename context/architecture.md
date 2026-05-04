@@ -147,7 +147,9 @@ ArbitragePage mounts
 
 ## Inter-System Relationships
 
-The repository has four system-level boundaries. Each pair's coupling is documented in the table below; failure-mode detail lives in the relevant system file.
+The repository has roughly fourteen system-level surfaces (Tab 1 stack + the Vector A subsystems shipped 2026-05-03). The most consequential cross-boundary relationships are listed here; per-system outward connections live in the owning `systems/*.md` file.
+
+### Tab 1 (Arbitrage) — runtime-foundation, market-data, analytics, gui
 
 | Upstream | Downstream | Mechanism | Boundary shape | What breaks if the link fails |
 | --- | --- | --- | --- | --- |
@@ -155,7 +157,112 @@ The repository has four system-level boundaries. Each pair's coupling is documen
 | arbitrage-market-data | arbitrage-analytics | `MarketOverview` payload over Tauri IPC (`invoke("fetch_market_overview")`), serialised as JSON with camelCase field names | Async request-response, fail-fast on any venue error | `deriveInsightsView` is never called; the UI keeps the last successful history, the error banner surfaces, the 1 Hz loop keeps retrying |
 | arbitrage-analytics | arbitrage-gui | `InsightsViewModel` pure-data handoff in the same React tree (no IPC) | In-process prop passing | Only the insights panel would fail; the rest of the dashboard continues — but in practice `deriveInsightsView` is called unconditionally when history is non-empty, so a throw propagates a full React error boundary failure |
 | runtime-foundation | arbitrage-gui | `MarketOverview`/`PriceSnapshot` TypeScript types in `src/features/arbitrage/types.ts` mirrored from `src-tauri/src/market/types.rs`; shell-level metadata via `index.html` + `tauri.conf.json` | Type-level contract bridged by Serde's `rename_all = "camelCase"` on the Rust side | A Rust field rename without the TS mirror being updated compiles cleanly on both sides but produces `undefined` reads at runtime — there is no automated contract check |
-| arbitrage-market-data | arbitrage-gui | Implicit ordering contract: `venues[0]` is treated as the hero price; `dexName` string values are used as identity keys by `VENUES` (ArbitragePage) and `SERIES_META` (MarketChart) | Position-based + string-based implicit contract | Reordering `vec![...]` in `commands/market.rs` silently changes the hero; renaming a DEX label (e.g. "Uniswap V3 5bps" → "Uniswap V3 0.05%") silently breaks both the venue card's price lookup and the chart's per-line colour/legend mapping |
+| arbitrage-market-data | arbitrage-gui | Implicit ordering contract: `venues[0]` is treated as the hero price; `dexName` string values are used as identity keys by `VENUES` (ArbitragePage) and `SERIES_META` (MarketChart) | Position-based + string-based implicit contract | Reordering `vec![...]` in `commands/market.rs` silently changes the hero; renaming a DEX label silently breaks both the venue card's price lookup and the chart's per-line colour/legend mapping |
+
+### Tab 2 (LP Backtest) — Vector A subsystems
+
+| Upstream | Downstream | Mechanism | Boundary shape | What breaks if the link fails |
+| --- | --- | --- | --- | --- |
+| ingest | storage | `Storage::insert_swap_events_batch(Vec<SwapEventRow>)` + `insert_pool_events_batch` | Async write through writer-thread; idempotent via `INSERT OR IGNORE` keyed on `(pool_address, block_number, log_index)` | `Ingester::backfill` returns `IngestError`; the LP page error-banners. Idempotency means partial failures are recoverable on next run |
+| storage | backtest | `Storage::query_swaps_for_pool_range(pool, from, to)` returns `Vec<SwapEventRow>` | Sync read via reader pool + `spawn_blocking`; rows ordered by `(block_number, log_index)` | `Engine::simulate` returns `BacktestError::EmptyData` when zero rows; pipeline halts. Backtest never blocks on a writer transaction |
+| math | backtest | Pure-function imports of `tick_to_sqrt_price_x96`, `liquidity_for_amounts`, `amounts_for_liquidity`, `fee_share_token0/1` | Synchronous function calls within one Tokio task | A `V3MathError` propagates as `BacktestError::MathError`; engine halts that simulation run |
+| backtest | strategies | `GridRunner::run_grid` invokes `Engine::simulate(config, rule)` per cell sequentially | Sequential per-cell loop; results aggregated into `StrategyResultRow` | Per-cell `BacktestError` halts that cell; grid continues to next cell. (The Pass 2 audit recommends a parallel variant — out of scope today) |
+| backtest | headline | `HeadlineRunner::run` invokes `Engine::simulate` per month per LP variant (best/naive/median) | Sequential per-(month, variant); 3 × N month sims | Per-month `BacktestError` halts that month; verdict still synthesises from remaining months |
+| strategies + benchmarks | headline | Headline reads strategy grid + benchmark series from storage and composes the verdict | Composition via two storage reads | Stale strategy grid → stale verdict; stale benchmarks → missing benchmark column in verdict |
+| commands/lp.rs | every Vector A backend | Tauri IPC dispatch — fan-out 16 (`Engine`, `Ingester`, `GridRunner`, `HeadlineRunner`, `DefiLlamaProvider`, `TradFiProvider`, `Storage`, etc.) | Async Tauri command surface; `CommandError { message, key_required }` shape | Backend error → `CommandError` returned to frontend; frontend renders error banner. The `key_required` field lets the frontend prompt for API-key configuration distinctly from generic errors |
+| commands/lp.rs | lp-backtest-gui | Per-IPC typed wrappers in `src/features/lp-backtest/api.ts` mirror Rust DTOs | JSON over Tauri IPC; Rust `serde(rename_all = "camelCase")` + hand-kept TS types in `types.ts` | Field rename in Rust without TS update → `undefined` at runtime; same risk class as Tab 1's wire-convention. Documented in `notes/wire-convention.md` |
+| telemetry | every page + every IPC | `telemetry.record(eventName, payload)` (frontend) + `telemetry_persist` IPC (backend writes to `~/Library/Logs/com.ataca.aurix/last-session.json`) | Cross-cutting event recorder; not in the dependency graph but used by every active flow | Telemetry buffer growth is bounded by interval flush; missing flush = recent events lost from `last-session.json` but the application continues to function |
+
+## Critical Paths and Blast Radius
+
+### Tab 2 — User clicks Re-run on the LP backtester
+
+This trace covers the dominant Vector A flow. It crosses 8 system boundaries.
+
+```
+LpBacktestPage useEffect fires (settings JSON-key changed OR rerunNonce bumped)
+  ├─ telemetry.record("lp.pipeline.start", {...})
+  ├─ lpPoolMetadata(...) ─IPC─→ commands::lp::lp_pool_metadata
+  │     └─ UniswapV3SubgraphSource::pool_metadata(addr) ─HTTP─→ hosted subgraph
+  │     ↑ on failure → CommandError; pipeline aborts with banner
+  │
+  ├─ lpGetChainHead(chain) ─IPC─→ commands::lp::lp_get_chain_head
+  │     ├─ AlchemyArchiveSource::from_environment().latest_finalized_block()
+  │     │     ↑ on failure (key missing or 400) → fall through
+  │     └─ public RPC → eth_getBlockByNumber("finalized")
+  │     ↑ on terminal failure → CommandError ("Could not reach chain head")
+  │
+  ├─ runLpIngestion(pool, head-N, head, chain, proto) ─IPC─→ commands::lp::run_lp_ingestion
+  │     ├─ Tier 1: UniswapV3SubgraphSource::for_protocol(...).fetch_logs ─→ Ingester::backfill
+  │     │     └─ decoder::decode_swap → SwapEventRow → Storage::insert_swap_events_batch
+  │     │     ↑ on failure → fall through to Tier 2
+  │     ├─ Tier 2: AlchemyArchiveSource::from_environment() (mainnet only) → Ingester::backfill
+  │     │     ↑ on failure → fall through to Tier 3
+  │     └─ Tier 3: AlchemyArchiveSource::with_rpc_url(public_rpc) → Ingester::backfill
+  │     ↑ on terminal failure → CommandError; no synthetic fallback (notes/no-synthetic-in-user-facing.md)
+  │
+  ├─ lpQueryFirstSwapPrice(pool, from, to, t0d, t1d) ─IPC─→ Storage::query_swaps_for_pool_range first row
+  │     └─ math::sqrt_price_x96_to_tick + math::price helpers → FirstSwapInfo { tick, price }
+  │
+  ├─ lpTokenUsdPrices(chain, [token0, token1]) ─IPC─→ commands::lp::lp_token_usd_prices
+  │     └─ DefiLlama coins API → TokenPricesDto
+  │
+  ├─ runLpBacktest(config, rule) ─IPC─→ commands::lp::run_lp_backtest
+  │     └─ Engine::simulate(config, rule)
+  │           ├─ Storage::query_swaps_for_pool_range → ~1k rows (TEXT decimal big-ints)
+  │           ├─ math::liquidity::liquidity_for_amounts (initial L from deposit + entry price)
+  │           ├─ per-swap loop (the dominant cost):
+  │           │     ├─ parse_sqrt / parse_signed / parse_liquidity (3-4 BigUint::parse_bytes per swap)
+  │           │     ├─ math::fees::fee_share_token0/1 (in-range check + share)
+  │           │     ├─ LVR discrete approximation (f64-cast Δsqrt²·L/sqrt)
+  │           │     ├─ rebalance trigger via RebalanceContext + RebalanceRule
+  │           │     └─ value_usd via position_usd_value(_explicit) — 3 calls per swap
+  │           └─ Storage::persist_position_run (idempotent on config_hash)
+  │
+  ├─ runLpGrid(grid_config) ─IPC─→ GridRunner::run_grid
+  │     └─ Engine::simulate per cell × 81 cells (3×3×3×3 default grid)
+  │
+  ├─ runLpHeadline(headline_config) ─IPC─→ HeadlineRunner::run
+  │     ├─ per-month sub-backtests × 3 LP variants × N months
+  │     ├─ benchmark series reads from Storage (per-asset)
+  │     ├─ adaptive-tercile vol-regime classifier
+  │     └─ verdict prose synthesis
+  │
+  ├─ lpFetchBenchmarkSeries(series_key) × N ─IPC─→ DefiLlamaProvider / TradFiProvider
+  │     └─ Storage::insert_benchmark_points_batch (replace-on-duplicate)
+  │
+  └─ React state updates → block components render
+```
+
+**Critical-path observations:**
+
+- **8 systems touched:** lp-backtest-gui, telemetry, IPC commands, ingest, storage, backtest, math, strategies, headline, benchmarks (10 if you count the cross-cutting telemetry recorder).
+- **Idempotency holds at every storage write.** Re-running the pipeline is a cache-hit at every step; React StrictMode's double-mount is structurally safe (per `notes/idempotent-runs.md`).
+- **Failure terminals at every step** are explicit `CommandError` returns; no path falls through to synthetic data (per `notes/no-synthetic-in-user-facing.md`).
+- **No paid-API path** in the chain: Subgraph → user-Alchemy → public RPC → empty-state (per `notes/free-data-fallback-chain.md`).
+
+### Tab 1 — 1 Hz `fetch_market_overview` tick
+
+This trace was previously the dominant flow before the Vector A sprint. It is unchanged by the sprint.
+
+```
+ArbitragePage mounts → setInterval(loadSnapshot, 1000)
+  └─ fetchMarketOverview() → invoke("fetch_market_overview")
+        ↓ IPC boundary
+        commands::market::fetch_market_overview
+        ├─ AppConfig::from_environment (config.rs)
+        ├─ EthereumRpcClient::new
+        ├─ tokio::join! of 5 futures (V3 5bps, V3 30bps, V2, Sushi, gas)
+        │     └─ any one .map_err? → whole command fails
+        └─ MarketOverview { venues: [...4...], gas_price_gwei, fetched_at_unix_ms }
+        ↓ IPC boundary (Rust → JSON camelCase)
+  └─ React state → 100-sample rolling history → derive insights → render PriceCard / Chart / Insights
+```
+
+**Critical-path observations** (unchanged from prior architecture pass):
+- **Single external dependency:** the Ethereum mainnet JSON-RPC endpoint (one URL backs every venue read + the gas read).
+- **Fail-fast error model:** any one venue's failure rejects the whole command (documented in `Aurix/Gaps.md` Gap 2 as a known limitation).
+- **`venues[0]` is the implicit hero contract;** reordering the vec silently switches which DEX the user sees as the price.
 
 ## Critical Paths and Blast Radius
 

@@ -1,16 +1,20 @@
 ---
 title: "Vector A — Uniswap V3 LP Backtester"
-status: active (research complete — implementation can begin)
+status: shipped (code-complete; behavioural verification of 4-tier extension pending)
 created: 2026-05-01
-last-updated: 2026-05-02
+last-updated: 2026-05-04
 activated: 2026-05-02
 research-completed: 2026-05-02
+implementation-shipped: 2026-05-03 (sprint, 21 commits)
+extension-shipped: 2026-05-04 (4-tier subgraph + cross-chain + V3 forks + non-USD pools, untested at session-end per commit 391eadd)
 vector: A
 hiring-audience: quant LP desks, DeFi protocol treasury / capital allocation teams, Uniswap Labs, DeFi-aware trading firms
-estimated-effort: 6-8 weeks focused
-depends-on: persistence layer (M2.0 — also unblocks Tab 1 Gap 1)
+estimated-effort: 6-8 weeks focused (actual: ~1 day for backend stack + multi-week timeline ahead for verification + frontend polish + audit findings)
+depends-on: persistence layer (M2.0 — shipped)
 research-foundation: 11 papers in context/references/ — see Research Foundation section below
 ---
+
+> **Status note (2026-05-04).** The Vector A backend stack shipped end-to-end on 2026-05-03 (M2.0 → M2.8). The 2026-05-04 commit 391eadd added a 4-tier extension (real subgraph adapter, cross-chain, V3 forks, non-USD-quote pools) that ships untested. Carry-forward items: verify Alchemy 400 (truncated key in `.env`), verify Sushi/Pancake subgraph URLs + pool presets. The audit at `context/plans/code-health-audit/` cites this plan and identifies free wins on the per-swap loop. Items below are mostly ticked; the unchecked ones reflect work either deferred or pending verification.
 
 # Vector A — Uniswap V3 LP Backtester
 

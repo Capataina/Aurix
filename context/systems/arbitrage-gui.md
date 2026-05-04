@@ -21,15 +21,15 @@
 
 | Surface | Current implementation reality |
 | --- | --- |
-| App root | `src/App.tsx` renders one full-screen arbitrage page with no routing and no cross-tab navigation |
-| Page layout | `ArbitragePage.tsx` lays out a top bar, hero panel, chart panel, insights panel, venue list, and detail list inside one dashboard screen |
-| Shell status copy | The top bar hard-codes three mode pills: `Ethereum mainnet`, `WETH / USDC`, and `1s cadence` |
-| Venue presentation | A static `VENUES` array defines labels, accents, summaries, and state text separately from the live backend payload |
+| App root | `src/App.tsx` is the multi-tab application root; routes between Tab 1 (Arbitrage) and Tab 2 (LP Backtest) via the `TopBar` shell. Tab 1 mounts `ArbitragePage`. |
+| Page layout | `ArbitragePage.tsx` lays out a stacked-scrollable block grid (post-2026-05-03 restructure) instead of the older draggable grid. Block ordering is reorder-able by editing the registry. |
+| Block grid | `src/components/blocks/arbitrage/` owns the per-block components: `PriceChartBlock` (540 lines, the main chart, restructured to TS rewrite + gradient + smooth + step marks), `ArbRouteBlock`, `BlockRegistry`, plus shared blocks in `src/components/blocks/shared/`. Folder layout: `blocks/{arbitrage,lp,shared}/` per the 2026-05-03 organisation commit (334e8ac). |
+| Settings menu | `TopBar` carries a route-aware `SettingsMenu`: hero venue picker, buffer size, stale threshold, plus per-page overrides for the LP page. Shipped commit 611ee40. |
+| Shell metadata | `index.html` references the proper Aurix metadata; the older "Tauri + React + Typescript" title and starter assets were updated as part of the multi-tab restructure. |
 | Hero card | `PriceCard.tsx` shows the first returned venue as the primary market readout, plus gas price, timestamp, error banner, and manual refresh control |
-| Chart surface | `MarketChart.tsx` renders the main SVG chart surface, mode controls, legend, and optional event markers |
+| Chart modes | `PriceChartBlock` supports three modes: Raw (4-venue lines, no fill), Spread, Net P/L (fill when zero straddles the domain). Deviation mode was dropped in commit cd5f7e8 because it was visually identical to Raw — only the y-axis labels differed. |
 | Insight surface | `InsightsPanel.tsx` renders the primary insight card, up to four secondary cards, and a recent-events list derived elsewhere |
-| Visual system | `theme.css` and `dashboard.css` implement a dark, dense monitoring layout using plain CSS rather than a component library or utility framework |
-| Shell metadata | `index.html` still references `/vite.svg` and uses the title `Tauri + React + Typescript`, while `tauri.conf.json` still uses the lower-case product and window title `aurix` |
+| Visual system | `src/styles/theme.css` + per-component CSS in `src/styles/components/` (one file per major surface: `blocks.css`, `card.css`, `chart.css`, `lp-backtest.css`, etc.) implement a dark, dense monitoring layout using plain CSS — no component library, no utility framework. |
 
 ## Key Interfaces / Data Flow
 
