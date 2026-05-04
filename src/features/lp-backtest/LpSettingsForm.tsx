@@ -230,9 +230,13 @@ export function LpSettingsForm({
           placeholder="0x… custom pool address"
         />
         <span className="settings-hint mono">
-          {settings.chainId === "ethereum"
-            ? `${CHAIN_CONFIGS.ethereum.blockTimeSeconds}s/block · ETH gas`
-            : `${CHAIN_CONFIGS[settings.chainId].label} · ${CHAIN_CONFIGS[settings.chainId].blockTimeSeconds}s/block`}
+          {(() => {
+            // Defensive: settings persisted before the chain selector was
+            // introduced won't have chainId; usePersistedState now merges
+            // defaults, but render path still tolerates an unknown id.
+            const cfg = CHAIN_CONFIGS[settings.chainId] ?? CHAIN_CONFIGS.ethereum;
+            return `${cfg.label} · ${cfg.blockTimeSeconds}s/block`;
+          })()}
         </span>
       </Section>
 

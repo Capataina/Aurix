@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
 /**
  * State hook that mirrors a single value into localStorage.
  *
  * - Reads on mount; if the stored value cannot be parsed it falls back silently.
- * - Writes on every change; ignores quota/availability errors so the UI never
- *   breaks when storage is unavailable (private modes, embedded webviews).
+ * - When both the stored value and `initialValue` are plain objects, the
+ *   stored value is shallow-merged over `initialValue`. New fields added
+ *   to a settings shape automatically pick up their defaults on next load,
+ *   instead of leaving `undefined` holes that would crash form components
+ *   reading them. Closes the bug class where adding a field (e.g. `chainId`
+ *   to `LpSettings`) crashes any user whose localStorage was written
+ *   before the field existed.
+ * - Writes on every change; ignores quota/availability errors so the UI
+ *   never breaks when storage is unavailable.
  */
 export function usePersistedState<T>(
   key: string,
@@ -21,7 +37,11 @@ export function usePersistedState<T>(
       if (raw === null) {
         return initialValue;
       }
-      return JSON.parse(raw) as T;
+      const parsed = JSON.parse(raw) as unknown;
+      if (isPlainObject(parsed) && isPlainObject(initialValue)) {
+        return { ...initialValue, ...parsed } as T;
+      }
+      return parsed as T;
     } catch {
       return initialValue;
     }

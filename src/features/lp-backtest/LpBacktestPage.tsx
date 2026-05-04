@@ -107,9 +107,8 @@ export function LpBacktestPage({
           protocol: settings.protocol,
           lookbackBlocks: settings.lookbackBlocks,
           rerunNonce,
+          settings,
         });
-        // eslint-disable-next-line no-console
-        console.log("[lp] auto-run: starting · settings=", settings);
         if (mounted) setBusy(true);
         if (mounted) setStatus("Fetching pool metadata…");
 
@@ -123,22 +122,17 @@ export function LpBacktestPage({
             settings.protocol,
           );
           if (mounted) setPoolMeta(meta);
-          // eslint-disable-next-line no-console
-          console.log(
-            "[lp] auto-run: pool metadata →",
-            meta.token0Symbol,
-            "/",
-            meta.token1Symbol,
-            "decimals",
-            meta.token0Decimals,
-            meta.token1Decimals,
-            "feeTier",
-            meta.feeTierBps,
-            "bps",
-          );
+          telemetry.record("lp.pipeline.pool-metadata", {
+            token0Symbol: meta.token0Symbol,
+            token1Symbol: meta.token1Symbol,
+            token0Decimals: meta.token0Decimals,
+            token1Decimals: meta.token1Decimals,
+            feeTierBps: meta.feeTierBps,
+          });
         } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: pool metadata fetch failed —", e);
+          telemetry.record("lp.pipeline.pool-metadata-error", {
+            error: String(e),
+          });
           if (mounted) setStatus("Pool metadata unavailable; using defaults");
         }
 
@@ -152,11 +146,11 @@ export function LpBacktestPage({
         let head: number | null = null;
         try {
           head = await lpGetChainHead(settings.chainId);
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: chain head =", head);
+          telemetry.record("lp.pipeline.chain-head", { head });
         } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: chain head fetch failed —", e);
+          telemetry.record("lp.pipeline.chain-head-error", {
+            error: String(e),
+          });
         }
         if (head === null || head < settings.lookbackBlocks) {
           // No reachable RPC for this chain. Surface as an error so
@@ -185,8 +179,7 @@ export function LpBacktestPage({
           settings.chainId,
           settings.protocol,
         );
-        // eslint-disable-next-line no-console
-        console.log("[lp] auto-run: live ingest →", ingestReport);
+        telemetry.record("lp.pipeline.ingest", { report: ingestReport });
         if (!mounted) return;
 
         // Realised entry tick + price from the first swap. Replaces
@@ -209,17 +202,16 @@ export function LpBacktestPage({
             );
             token0UsdPrice = prices[meta.token0Address.toLowerCase()] ?? null;
             token1UsdPrice = prices[meta.token1Address.toLowerCase()] ?? null;
-            // eslint-disable-next-line no-console
-            console.log(
-              "[lp] auto-run: token USD prices →",
-              meta.token0Symbol,
+            telemetry.record("lp.pipeline.token-usd-prices", {
+              token0Symbol: meta.token0Symbol,
               token0UsdPrice,
-              meta.token1Symbol,
+              token1Symbol: meta.token1Symbol,
               token1UsdPrice,
-            );
+            });
           } catch (e) {
-            // eslint-disable-next-line no-console
-            console.log("[lp] auto-run: token USD price fetch failed —", e);
+            telemetry.record("lp.pipeline.token-usd-prices-error", {
+              error: String(e),
+            });
           }
         }
         const firstSwap = await lpQueryFirstSwapPrice(
@@ -235,13 +227,10 @@ export function LpBacktestPage({
         const entryPrice = firstSwap?.humanPrice ?? 1;
         if (!mounted) return;
         setResolved({ fromBlock, toBlock, tickLower, tickUpper, entryPrice });
-        // eslint-disable-next-line no-console
-        console.log(
-          "[lp] auto-run: first swap → tick",
-          tickAnchor,
-          "price",
-          entryPrice.toFixed(4),
-        );
+        telemetry.record("lp.pipeline.first-swap", {
+          tick: tickAnchor,
+          entryPrice,
+        });
 
         // Fan out the benchmark fetches in parallel with the rest of
         // the pipeline.
@@ -260,14 +249,10 @@ export function LpBacktestPage({
             next[benchmarkSeriesKeys[i]] = r.status === "fulfilled" ? r.value : [];
           });
           if (mounted) setBenchmarks(next);
-          // eslint-disable-next-line no-console
-          console.log(
-            "[lp] auto-run: benchmarks →",
-            results.filter((r) => r.status === "fulfilled").length,
-            "of",
-            benchmarkSeriesKeys.length,
-            "fetched",
-          );
+          telemetry.record("lp.pipeline.benchmarks", {
+            fetched: results.filter((r) => r.status === "fulfilled").length,
+            requested: benchmarkSeriesKeys.length,
+          });
           return next;
         });
 
@@ -304,19 +289,21 @@ export function LpBacktestPage({
           token1UsdPrice,
         };
         const response = await runLpBacktest(cfg, settings.rule);
-        // eslint-disable-next-line no-console
-        console.log(
-          "[lp] auto-run: backtest →",
-          response.summary,
-          response.equityCurve.length,
-          "samples",
-        );
+        telemetry.record("lp.pipeline.backtest", {
+          summary: response.summary,
+          samples: response.equityCurve.length,
+        });
         if (!mounted) return;
         setSummary(response.summary);
         setCurve(response.equityCurve);
 
         if (mounted) setStatus("Running strategy grid…");
-        const chainConfig = CHAIN_CONFIGS[settings.chainId];
+        // Defensive: tolerate persisted-state shapes that pre-date the
+        // chainId field; usePersistedState shape-merges defaults but
+        // an unknown id (custom chain that no longer exists) should
+        // still degrade to Ethereum rather than crash.
+        const chainConfig =
+          CHAIN_CONFIGS[settings.chainId] ?? CHAIN_CONFIGS.ethereum;
         const gridConfig: GridConfig = {
           grid_id: `auto_${Date.now()}`,
           pool_address: settings.poolAddress,
@@ -341,8 +328,7 @@ export function LpBacktestPage({
           ),
         };
         const gridRows = await runLpGrid(gridConfig);
-        // eslint-disable-next-line no-console
-        console.log("[lp] auto-run: grid →", gridRows.length, "cells");
+        telemetry.record("lp.pipeline.grid", { cells: gridRows.length });
         if (!mounted) return;
         setStrategies(gridRows);
 
@@ -355,8 +341,7 @@ export function LpBacktestPage({
         );
         if (headlineConfig) {
           const out = await runLpHeadline(headlineConfig);
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: headline →", out.summary);
+          telemetry.record("lp.pipeline.headline", { summary: out.summary });
           if (!mounted) return;
           setHeadline(out.summary);
           setHeadlineMonthly(out.monthly);
@@ -364,16 +349,12 @@ export function LpBacktestPage({
 
         if (mounted) {
           setStatus("Auto-run complete");
-          // eslint-disable-next-line no-console
-          console.log("[lp] auto-run: COMPLETE");
           telemetry.record("lp.pipeline.complete", {
             samples: response.equityCurve.length,
             gridCells: gridRows.length,
           });
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("[lp] auto-run: FAILED —", e);
         telemetry.record("lp.pipeline.failed", { error: formatError(e) });
         if (mounted) setStatus(`Auto-run failed: ${formatError(e)}`);
       } finally {
