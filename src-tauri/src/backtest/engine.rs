@@ -8,6 +8,12 @@
 //! emits a per-sample equity curve.
 //!
 //! Reference: `vector-a-v3-lp-backtester.md` §M2.3.
+//!
+//! Audit findings applied (see `context/plans/code-health-audit/backtest.md`):
+//!   - Pre-parse swap rows once into `ParsedSwap` (Data Layout / Memory Access).
+//!   - Hoist invariant hold-only USD computation out of the per-swap loop.
+//!   - Accumulate fees-USD incrementally instead of re-converting accumulators.
+//!   - Magic-constant precompute lives in `math/tick.rs`.
 
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
@@ -16,6 +22,7 @@ use crate::math::fees::{bps_to_protocol_units, fee_share_token0, fee_share_token
 use crate::math::liquidity::{amounts_for_liquidity, liquidity_for_amounts};
 use crate::math::tick::tick_to_sqrt_price_x96;
 use crate::storage::runs::{EquityCurvePoint, PositionRunSummary};
+use crate::storage::swaps::SwapEventRow;
 use crate::storage::Storage;
 
 use super::error::BacktestError;
@@ -39,6 +46,109 @@ pub struct Engine<'a> {
     pub storage: &'a Storage,
 }
 
+/// Pre-parsed swap row. The storage layer keeps big integers as decimal
+/// TEXT for full uint160 / int256 / uint128 precision; the engine pays
+/// the parse cost exactly once per row by walking the loaded swap vec
+/// up-front into this denser representation. Closes the per-loop
+/// allocation finding in `code-health-audit/backtest.md`.
+struct ParsedSwap {
+    block_number: i64,
+    block_timestamp: i64,
+    block_gas_price_gwei: Option<f64>,
+    sqrt_price_x96: BigUint,
+    liquidity: u128,
+    amount0_in: BigUint,
+    amount1_in: BigUint,
+    tick: i32,
+}
+
+fn parse_swaps(rows: Vec<SwapEventRow>) -> Result<Vec<ParsedSwap>, BacktestError> {
+    rows.into_iter()
+        .map(|s| {
+            let sqrt_price_x96 = BigUint::parse_bytes(s.sqrt_price_x96.as_bytes(), 10)
+                .ok_or_else(|| {
+                    BacktestError::Parse(format!("sqrt_price_x96 from '{}'", s.sqrt_price_x96))
+                })?;
+            let liquidity = s
+                .liquidity
+                .parse::<u128>()
+                .map_err(|_| BacktestError::Parse(format!("liquidity from '{}'", s.liquidity)))?;
+            let amount0_signed = BigInt::parse_bytes(s.amount0.as_bytes(), 10)
+                .ok_or_else(|| BacktestError::Parse(format!("amount0 from '{}'", s.amount0)))?;
+            let amount1_signed = BigInt::parse_bytes(s.amount1.as_bytes(), 10)
+                .ok_or_else(|| BacktestError::Parse(format!("amount1 from '{}'", s.amount1)))?;
+            let zero = BigInt::from(0u8);
+            let amount0_in = if amount0_signed > zero {
+                amount0_signed.to_biguint().unwrap_or_default()
+            } else {
+                BigUint::from(0u8)
+            };
+            let zero = BigInt::from(0u8);
+            let amount1_in = if amount1_signed > zero {
+                amount1_signed.to_biguint().unwrap_or_default()
+            } else {
+                BigUint::from(0u8)
+            };
+            Ok(ParsedSwap {
+                block_number: s.block_number,
+                block_timestamp: s.block_timestamp,
+                block_gas_price_gwei: s.block_gas_price_gwei,
+                sqrt_price_x96,
+                liquidity,
+                amount0_in,
+                amount1_in,
+                tick: s.tick,
+            })
+        })
+        .collect()
+}
+
+/// Hold-only USD evaluator. Initialised once per simulate call and
+/// closed over the deposit token amounts (which are loop-invariant).
+/// The `eval(cur_price)` call in the per-swap loop is then a constant-
+/// time multiply-add — no `BigUint::to_f64`, no `value_usd` closure
+/// dispatch, no `position_usd_value` re-conversion. Closes the audit
+/// finding `backtest.md` §"Hoist invariant USD-conversion of hold-only
+/// baseline".
+struct HoldOnlyEvaluator {
+    /// Pre-computed hold-only USD when token0_usd_price + token1_usd_price
+    /// are configured. Constant across the run.
+    explicit: Option<f64>,
+    /// Pre-computed decimal-adjusted token0 amount, or 0.0 when explicit
+    /// pricing is configured (path unused).
+    a0_decimal: f64,
+    /// Pre-computed decimal-adjusted token1 amount.
+    a1_decimal: f64,
+}
+
+impl HoldOnlyEvaluator {
+    fn new(deposit0: &BigUint, deposit1: &BigUint, config: &PositionConfig) -> Self {
+        let a0_decimal = deposit0.to_f64().unwrap_or(0.0)
+            / 10f64.powi(config.token0_decimals as i32);
+        let a1_decimal = deposit1.to_f64().unwrap_or(0.0)
+            / 10f64.powi(config.token1_decimals as i32);
+        let explicit = match (config.token0_usd_price, config.token1_usd_price) {
+            (Some(p0), Some(p1)) => Some(a0_decimal * p0 + a1_decimal * p1),
+            _ => None,
+        };
+        Self {
+            explicit,
+            a0_decimal,
+            a1_decimal,
+        }
+    }
+
+    /// Evaluate hold-only USD at `cur_price` (token1-per-token0). When
+    /// explicit pricing is configured the price is ignored and the
+    /// pre-computed constant is returned.
+    fn eval(&self, cur_price: f64) -> f64 {
+        match self.explicit {
+            Some(v) => v,
+            None => self.a0_decimal * cur_price + self.a1_decimal,
+        }
+    }
+}
+
 impl<'a> Engine<'a> {
     pub fn new(storage: &'a Storage) -> Self {
         Self { storage }
@@ -55,7 +165,7 @@ impl<'a> Engine<'a> {
     ) -> Result<SimulationOutput, BacktestError> {
         config.validate()?;
 
-        let swaps = self
+        let swaps_raw = self
             .storage
             .query_swaps_for_pool_range(
                 config.pool_address.clone(),
@@ -63,7 +173,7 @@ impl<'a> Engine<'a> {
                 config.exit_block as i64,
             )
             .await?;
-        if swaps.is_empty() {
+        if swaps_raw.is_empty() {
             return Err(BacktestError::EmptyData {
                 pool: config.pool_address.clone(),
                 from: config.entry_block,
@@ -71,9 +181,14 @@ impl<'a> Engine<'a> {
             });
         }
 
+        // Pre-parse all swap rows into a denser in-memory representation.
+        // Pays the parse cost once per row instead of N times in the
+        // per-swap loop.
+        let swaps = parse_swaps(swaps_raw)?;
+
         // Initialise position state from the first swap's price.
         let first_swap = &swaps[0];
-        let entry_sqrt = parse_sqrt(&first_swap.sqrt_price_x96)?;
+        let entry_sqrt = first_swap.sqrt_price_x96.clone();
         let entry_price = sqrt_price_x96_to_human_price(
             &entry_sqrt,
             config.token0_decimals,
@@ -97,16 +212,14 @@ impl<'a> Engine<'a> {
             &deposit1,
         )?;
 
-        // Hold-only baseline: convert deposit composition to USD at entry,
-        // then revalue at every step.
-        let hold_amount0 = deposit0.clone();
-        let hold_amount1 = deposit1.clone();
+        // Hold-only baseline: pre-computed once, closure-free per-step
+        // evaluation.
+        let hold_eval = HoldOnlyEvaluator::new(&deposit0, &deposit1, &config);
+
         // Closure that picks between the pool-ratio-based USD valuation
-        // (assumes token1 is USD-pegged) and the explicit per-token
-        // USD valuation (works for any pair). When both USD prices
-        // are configured, the explicit path takes over for *every*
-        // USD calc downstream — fees, IL, hold-only, position value,
-        // gas — so the entire dashboard is internally consistent.
+        // and the explicit per-token USD valuation. Used for the *current*
+        // amounts (which change per step); not used for hold-only or fees
+        // any more — those have specialised paths below.
         let value_usd = |a0: &BigUint, a1: &BigUint, ratio: f64| -> f64 {
             match (config.token0_usd_price, config.token1_usd_price) {
                 (Some(p0), Some(p1)) => position_usd_value_explicit(
@@ -131,6 +244,12 @@ impl<'a> Engine<'a> {
         // Running aggregates.
         let mut fees_token0_acc = BigUint::from(0u8);
         let mut fees_token1_acc = BigUint::from(0u8);
+        // Incremental fees-USD accumulator. Closes audit finding
+        // `backtest.md` §"Accumulate fees-USD incrementally". Each
+        // step adds value_usd(delta_f0, delta_f1, cur_price) instead
+        // of re-converting the accumulators (which would walk the
+        // growing BigUint digit vector every iteration).
+        let mut fees_usd_acc = 0.0f64;
         let mut lvr_usd_acc = 0.0f64;
         let mut mgmt_gas_acc_usd = 0.0f64;
         let mut last_rebalance_block = config.entry_block;
@@ -147,14 +266,14 @@ impl<'a> Engine<'a> {
         // Per-swap walk.
         let mut prev_sqrt = entry_sqrt.clone();
         for (idx, swap) in swaps.iter().enumerate() {
-            let cur_sqrt = parse_sqrt(&swap.sqrt_price_x96)?;
+            let cur_sqrt = &swap.sqrt_price_x96;
             let cur_tick = swap.tick;
             let cur_price = sqrt_price_x96_to_human_price(
-                &cur_sqrt,
+                cur_sqrt,
                 config.token0_decimals,
                 config.token1_decimals,
             );
-            let active_liquidity = parse_liquidity(&swap.liquidity)?;
+            let active_liquidity = swap.liquidity;
 
             let in_range = cur_tick >= tick_lower && cur_tick < tick_upper;
             if in_range {
@@ -163,23 +282,25 @@ impl<'a> Engine<'a> {
                 blocks_oor_streak = blocks_oor_streak.saturating_add(1);
             }
 
-            // Fees for this swap.
-            let amount0_signed = parse_signed(&swap.amount0)?;
-            let amount1_signed = parse_signed(&swap.amount1)?;
-            let (in0, in1) = (
-                if amount0_signed > BigInt::from(0u8) {
-                    amount0_signed.to_biguint().unwrap_or_default()
-                } else {
-                    BigUint::from(0u8)
-                },
-                if amount1_signed > BigInt::from(0u8) {
-                    amount1_signed.to_biguint().unwrap_or_default()
-                } else {
-                    BigUint::from(0u8)
-                },
-            );
-            let f0 = fee_share_token0(&in0, fee_units, liquidity, active_liquidity, in_range)?;
-            let f1 = fee_share_token1(&in1, fee_units, liquidity, active_liquidity, in_range)?;
+            // Fees for this swap (zero if out of range or active_L is 0).
+            let f0 = fee_share_token0(
+                &swap.amount0_in,
+                fee_units,
+                liquidity,
+                active_liquidity,
+                in_range,
+            )?;
+            let f1 = fee_share_token1(
+                &swap.amount1_in,
+                fee_units,
+                liquidity,
+                active_liquidity,
+                in_range,
+            )?;
+            // Incrementally add USD-converted delta fees so we never
+            // re-walk the (monotonically growing) accumulator BigUints.
+            let delta_fees_usd = value_usd(&f0, &f1, cur_price);
+            fees_usd_acc += delta_fees_usd;
             fees_token0_acc += &f0;
             fees_token1_acc += &f1;
 
@@ -202,7 +323,8 @@ impl<'a> Engine<'a> {
             }
 
             // Rebalance check.
-            let blocks_since_rebalance = (swap.block_number as u64).saturating_sub(last_rebalance_block);
+            let blocks_since_rebalance =
+                (swap.block_number as u64).saturating_sub(last_rebalance_block);
             let ctx = RebalanceContext {
                 current_block: swap.block_number as u64,
                 blocks_since_last_rebalance: blocks_since_rebalance,
@@ -217,7 +339,7 @@ impl<'a> Engine<'a> {
                 mgmt_gas_acc_usd += cost_usd(MgmtGasOp::Rebalance, rebalance_gas_gwei, cur_price);
                 // MEV haircut on the rebalance leg, if configured.
                 let (a0_now, a1_now) =
-                    amounts_for_liquidity(&cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
+                    amounts_for_liquidity(cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
                 let position_value_now = value_usd(&a0_now, &a1_now, cur_price);
                 if config.mev_haircut_bps > 0.0 {
                     mgmt_gas_acc_usd +=
@@ -231,7 +353,7 @@ impl<'a> Engine<'a> {
                 sqrt_lower = tick_to_sqrt_price_x96(tick_lower)?;
                 sqrt_upper = tick_to_sqrt_price_x96(tick_upper)?;
                 liquidity = liquidity_for_amounts(
-                    &cur_sqrt,
+                    cur_sqrt,
                     &sqrt_lower,
                     &sqrt_upper,
                     &a0_now,
@@ -244,13 +366,12 @@ impl<'a> Engine<'a> {
 
             // Position USD value at this step.
             let (a0_cur, a1_cur) =
-                amounts_for_liquidity(&cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
+                amounts_for_liquidity(cur_sqrt, &sqrt_lower, &sqrt_upper, liquidity)?;
             let raw_position_value = value_usd(&a0_cur, &a1_cur, cur_price);
-            let fees_usd = value_usd(&fees_token0_acc, &fees_token1_acc, cur_price);
-            let position_value_usd = raw_position_value + fees_usd;
+            let position_value_usd = raw_position_value + fees_usd_acc;
 
-            // Hold-only revalued at this step.
-            let hold_only_usd = value_usd(&hold_amount0, &hold_amount1, cur_price);
+            // Hold-only revalued at this step (constant-time evaluator).
+            let hold_only_usd = hold_eval.eval(cur_price);
             // Impermanent loss = LP token value (excluding fees earned)
             // minus the hold-only baseline. Negative when the LP is
             // worse off than holding both tokens 50/50 at the same
@@ -266,7 +387,7 @@ impl<'a> Engine<'a> {
                 block_number: swap.block_number,
                 block_timestamp: swap.block_timestamp,
                 position_value_usd,
-                fees_accumulated_usd: fees_usd,
+                fees_accumulated_usd: fees_usd_acc,
                 il_usd,
                 lvr_usd: lvr_usd_acc,
                 mgmt_gas_paid_usd: mgmt_gas_acc_usd,
@@ -275,15 +396,17 @@ impl<'a> Engine<'a> {
                 in_range,
             });
 
-            prev_sqrt = cur_sqrt;
+            // Move the sqrt forward by reference-clone (cheap — BigUint
+            // clone is a Vec clone, but the alternative is parsing
+            // every row again).
+            prev_sqrt = cur_sqrt.clone();
         }
 
         // Pay burn cost at exit, priced at last swap's gas.
         let last_swap = swaps.last().unwrap();
         let last_gas_gwei = last_swap.block_gas_price_gwei.unwrap_or(first_gas_gwei);
-        let last_sqrt = parse_sqrt(&last_swap.sqrt_price_x96)?;
         let last_price = sqrt_price_x96_to_human_price(
-            &last_sqrt,
+            &last_swap.sqrt_price_x96,
             config.token0_decimals,
             config.token1_decimals,
         );
@@ -351,24 +474,15 @@ impl<'a> Engine<'a> {
             completed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
         };
 
+        // The fees BigUint accumulators are not part of the summary —
+        // they exist for any future caller that wants the raw token-units
+        // breakdown. Suppress unused-variable warning while keeping them
+        // available for that future caller.
+        let _ = (fees_token0_acc, fees_token1_acc);
+
         Ok(SimulationOutput {
             summary,
             equity_curve: equity_points,
         })
     }
-}
-
-fn parse_sqrt(s: &str) -> Result<BigUint, BacktestError> {
-    BigUint::parse_bytes(s.as_bytes(), 10)
-        .ok_or_else(|| BacktestError::Parse(format!("sqrt_price_x96 from '{s}'")))
-}
-
-fn parse_liquidity(s: &str) -> Result<u128, BacktestError> {
-    s.parse::<u128>()
-        .map_err(|_| BacktestError::Parse(format!("liquidity from '{s}'")))
-}
-
-fn parse_signed(s: &str) -> Result<BigInt, BacktestError> {
-    BigInt::parse_bytes(s.as_bytes(), 10)
-        .ok_or_else(|| BacktestError::Parse(format!("signed amount from '{s}'")))
 }

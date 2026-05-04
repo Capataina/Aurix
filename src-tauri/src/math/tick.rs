@@ -10,6 +10,8 @@
 //! `TickMath.sol` quoted passage P-TM-4.
 
 use num_bigint::BigUint;
+use num_traits::Zero;
+use once_cell::sync::Lazy;
 
 use super::error::V3MathError;
 use super::q96::{
@@ -17,36 +19,47 @@ use super::q96::{
 };
 
 /// Magic constants, indexed by bit position (0..=19). Bit `k` corresponds
-/// to the `1.0001^(-2^k)` factor in Q128.128, rounded up.
-const MAGIC: [&str; 20] = [
-    "0xfffcb933bd6fad37aa2d162d1a594001",
-    "0xfff97272373d413259a46990580e213a",
-    "0xfff2e50f5f656932ef12357cf3c7fdcc",
-    "0xffe5caca7e10e4e61c3624eaa0941cd0",
-    "0xffcb9843d60f6159c9db58835c926644",
-    "0xff973b41fa98c081472e6896dfb254c0",
-    "0xff2ea16466c96a3843ec78b326b52861",
-    "0xfe5dee046a99a2a811c461f1969c3053",
-    "0xfcbe86c7900a88aedcffc83b479aa3a4",
-    "0xf987a7253ac413176f2b074cf7815e54",
-    "0xf3392b0822b70005940c7a398e4b70f3",
-    "0xe7159475a2c29b7443b29c7fa6e889d9",
-    "0xd097f3bdfd2022b8845ad8f792aa5825",
-    "0xa9f746462d870fdf8a65dc1f90e061e5",
-    "0x70d869a156d2a1b890bb3df62baf32f7",
-    "0x31be135f97d08fd981231505542fcfa6",
-    "0x9aa508b5b7a84e1c677de54f3e99bc9",
-    "0x5d6af8dedb81196699c329225ee604",
-    "0x2216e584f5fa1ea926041bedfe98",
-    "0x48a170391f7dc42444e8fa2",
-];
+/// to the `1.0001^(-2^k)` factor in Q128.128, rounded up. Each value is
+/// the bit-exact transcription of the matching `getSqrtRatioAtTick`
+/// magic constant from `TickMath.sol`.
+///
+/// Computed once on first access via `Lazy`. Previously parsed per call
+/// inside the per-swap loop; precomputing avoids ~20 transient `BigUint`
+/// allocations per tick decode (audit finding `math.md` §"Pre-compute
+/// the 20 tick-magic constants once").
+static MAGIC: Lazy<[BigUint; 20]> = Lazy::new(|| {
+    const HEX: [&str; 20] = [
+        "fffcb933bd6fad37aa2d162d1a594001",
+        "fff97272373d413259a46990580e213a",
+        "fff2e50f5f656932ef12357cf3c7fdcc",
+        "ffe5caca7e10e4e61c3624eaa0941cd0",
+        "ffcb9843d60f6159c9db58835c926644",
+        "ff973b41fa98c081472e6896dfb254c0",
+        "ff2ea16466c96a3843ec78b326b52861",
+        "fe5dee046a99a2a811c461f1969c3053",
+        "fcbe86c7900a88aedcffc83b479aa3a4",
+        "f987a7253ac413176f2b074cf7815e54",
+        "f3392b0822b70005940c7a398e4b70f3",
+        "e7159475a2c29b7443b29c7fa6e889d9",
+        "d097f3bdfd2022b8845ad8f792aa5825",
+        "a9f746462d870fdf8a65dc1f90e061e5",
+        "70d869a156d2a1b890bb3df62baf32f7",
+        "31be135f97d08fd981231505542fcfa6",
+        "9aa508b5b7a84e1c677de54f3e99bc9",
+        "5d6af8dedb81196699c329225ee604",
+        "2216e584f5fa1ea926041bedfe98",
+        "48a170391f7dc42444e8fa2",
+    ];
+    std::array::from_fn(|i| {
+        BigUint::parse_bytes(HEX[i].as_bytes(), 16)
+            .expect("magic constant literal is valid hex (transcribed from TickMath.sol)")
+    })
+});
 
-fn magic(bit: usize) -> BigUint {
-    let lit = MAGIC[bit];
-    let stripped = lit.trim_start_matches("0x");
-    BigUint::parse_bytes(stripped.as_bytes(), 16)
-        .expect("magic constant literal is valid hex (transcribed from TickMath.sol)")
-}
+/// 2^32 — the renormalisation factor used when shifting the Q128.128
+/// ratio down to Q64.96. Lazy-init alongside the rest of the q96
+/// constants pattern.
+static TWO_POW_32: Lazy<BigUint> = Lazy::new(|| BigUint::from(1u8) << 32);
 
 /// Computes `sqrtPriceX96 = floor(sqrt(1.0001^tick) · 2^96)` for any tick
 /// in `[MIN_TICK, MAX_TICK]`. Bit-exact match for `getSqrtRatioAtTick`
@@ -65,7 +78,7 @@ pub fn tick_to_sqrt_price_x96(tick: i32) -> Result<BigUint, V3MathError> {
 
     // Start ratio in Q128.128. If bit 0 set, start at 1.0001^(-1); else 1.
     let mut ratio: BigUint = if abs_tick & 0x1 != 0 {
-        magic(0)
+        MAGIC[0].clone()
     } else {
         Q128.clone()
     };
@@ -74,7 +87,7 @@ pub fn tick_to_sqrt_price_x96(tick: i32) -> Result<BigUint, V3MathError> {
     // in Q128.128 and shift right 128 to renormalise.
     for k in 1..20usize {
         if abs_tick & (1u32 << k) != 0 {
-            ratio = (&ratio * magic(k)) >> 128;
+            ratio = (&ratio * &MAGIC[k]) >> 128;
         }
     }
 
@@ -83,14 +96,12 @@ pub fn tick_to_sqrt_price_x96(tick: i32) -> Result<BigUint, V3MathError> {
         ratio = &*U256_MAX / ratio;
     }
 
-    // Shift from Q128.128 down to Q64.96, rounding up the dropped bits.
-    let dropped: BigUint = &ratio % (BigUint::from(1u8) << 32);
+    // Shift from Q128.128 down to Q64.96, rounding up when any bits are
+    // dropped (i.e. dropped > 0).
+    let dropped: BigUint = &ratio % &*TWO_POW_32;
     let mut sqrt_price_x96 = ratio >> 32;
-    if !dropped.bits().eq(&0) {
-        // any non-zero dropped bits → round up
-        if dropped > BigUint::from(0u8) {
-            sqrt_price_x96 += 1u8;
-        }
+    if !dropped.is_zero() {
+        sqrt_price_x96 += 1u8;
     }
 
     Ok(sqrt_price_x96)

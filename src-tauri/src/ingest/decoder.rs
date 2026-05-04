@@ -88,18 +88,23 @@ fn parse_uint128_word(word: &str) -> Result<u128, IngestError> {
 
 /// Parses a 32-byte word that holds a sign-extended int24. The value lives
 /// in the low 3 bytes; bytes 0..29 are 0xff for negative values.
+///
+/// Reads only the last 6 hex chars (3 bytes) directly via
+/// `u32::from_str_radix` rather than allocating a 32-byte `Vec<u8>` per
+/// call (audit finding `ingest.md` §"Avoid per-event byte-by-byte
+/// allocation").
 fn parse_int24_word(word: &str) -> Result<i32, IngestError> {
-    let bytes = hex::decode(word)?;
-    if bytes.len() != 32 {
+    if word.len() != WORD_HEX_LEN {
         return Err(IngestError::MalformedLog(format!(
-            "int24 word expects 32 bytes, got {}",
-            bytes.len()
+            "int24 word expects {WORD_HEX_LEN} hex chars, got {}",
+            word.len()
         )));
     }
-    // Detect negative by sign-extension: byte 28 high bit should equal
-    // bytes 0..28 (0xff for negative, 0x00 for non-negative).
-    let negative = bytes[29] & 0x80 != 0;
-    let raw = ((bytes[29] as u32) << 16) | ((bytes[30] as u32) << 8) | (bytes[31] as u32);
+    let raw = u32::from_str_radix(&word[58..64], 16)
+        .map_err(|e| IngestError::MalformedLog(format!("int24 parse: {e}")))?;
+    // Sign bit lives in the high bit of the most-significant of the
+    // three bytes (bit 23 of `raw`).
+    let negative = raw & 0x0080_0000 != 0;
     if negative {
         // Sign-extend from 24 to 32 bits.
         Ok((raw | 0xFF00_0000) as i32)

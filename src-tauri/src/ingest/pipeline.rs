@@ -19,6 +19,11 @@ use super::source::ArchiveSource;
 
 /// Per-call ingestion result — the counts surface on the IPC boundary so
 /// the GUI can show an "ingested N swaps in M seconds" toast.
+///
+/// `source_label` and `attempted_sources` carry the tiered-fallback
+/// telemetry the GUI uses to surface "subgraph failed → fell through to
+/// public RPC" without resorting to stderr `eprintln!` (audit finding
+/// `code-health-audit/ipc-commands.md` §"Inconsistent Patterns").
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionReport {
@@ -28,6 +33,27 @@ pub struct IngestionReport {
     pub swap_rows_persisted: usize,
     pub pool_event_rows_persisted: usize,
     pub gas_rows_persisted: usize,
+    /// Identifier of the source that ultimately succeeded, e.g.
+    /// `"subgraph"`, `"alchemy"`, `"public-rpc"`, `"mock"`. Always set
+    /// after a successful backfill; the IPC layer rewrites this when
+    /// it wraps a per-source `Ingester::backfill` call inside its
+    /// tiered-fallback orchestration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_label: Option<String>,
+    /// Source identifiers that were attempted before this one in the
+    /// tiered fallback. Empty when the first source succeeded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempted_sources: Vec<AttemptedSource>,
+}
+
+/// One row in the tiered-fallback attempt log. Each entry records the
+/// source that was tried and the human-readable error that bumped the
+/// orchestrator down to the next tier.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttemptedSource {
+    pub source_label: String,
+    pub error: String,
 }
 
 pub struct Ingester {
@@ -162,6 +188,8 @@ impl Ingester {
             swap_rows_persisted: total_swaps,
             pool_event_rows_persisted: total_pool_events,
             gas_rows_persisted: total_gas,
+            source_label: None,
+            attempted_sources: Vec::new(),
         })
     }
 

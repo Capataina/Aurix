@@ -10,13 +10,14 @@
 
 use std::sync::Arc;
 
+use once_cell::sync::Lazy;
 use serde::Serialize;
 use tauri::State;
 
 use crate::backtest::{Engine, PositionConfig, RebalanceRule, SimulationOutput};
 use crate::benchmarks::{
     AAVE_V3_USDC_SUPPLY_POOL, COMPOUND_V3_USDC_SUPPLY_POOL, DefiLlamaProvider,
-    LIDO_STETH_POOL, MockHttpFetcher, ReqwestFetcher, TradFiProvider,
+    LIDO_STETH_POOL, ReqwestFetcher, TradFiProvider,
     FRED_DGS3MO_URL, FRED_GOLD_LBMA_URL, FRED_SP500_URL,
 };
 use crate::config::chains::Protocol;
@@ -26,8 +27,8 @@ use crate::math::sqrt_price_x96_to_tick;
 use num_bigint::BigUint;
 use crate::headline::{HeadlineConfig, HeadlineOutput, HeadlineRunner};
 use crate::ingest::{
-    AlchemyArchiveSource, ArchiveSource, IngestError, IngestionReport, Ingester, MockArchiveSource,
-    PoolMetadata as IngestPoolMetadata, UniswapV3SubgraphSource,
+    AlchemyArchiveSource, ArchiveSource, AttemptedSource, IngestError, IngestionReport, Ingester,
+    MockArchiveSource, PoolMetadata as IngestPoolMetadata, UniswapV3SubgraphSource,
 };
 use crate::storage::{
     benchmarks::BenchmarkPoint,
@@ -38,6 +39,17 @@ use crate::storage::{
     Storage,
 };
 use crate::strategies::{GridConfig, GridRunner};
+
+/// Process-wide HTTP client for the DefiLlama token-prices endpoint.
+/// Constructed once on first use; subsequent calls reuse the underlying
+/// connection pool (audit finding `code-health-audit/ipc-commands.md`
+/// §"Reuse the reqwest::Client").
+static TOKEN_PRICE_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("default reqwest::Client builder cannot fail")
+});
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +128,12 @@ fn parse_protocol(protocol: Option<&str>) -> Protocol {
 /// On total failure, surfaces an error to the caller — we deliberately
 /// do not fall back to synthetic data in user-facing flows. Empty/error
 /// state is a more honest signal than fabricated numbers.
+///
+/// The successful report's `source_label` records which tier ultimately
+/// succeeded; `attempted_sources` carries any tiers that errored along
+/// the way so the frontend can show a "subgraph failed → fell through
+/// to public RPC" status without resorting to stderr (audit finding
+/// `code-health-audit/ipc-commands.md` §"Inconsistent Patterns").
 #[tauri::command]
 pub async fn run_lp_ingestion(
     storage: State<'_, Arc<Storage>>,
@@ -127,15 +145,22 @@ pub async fn run_lp_ingestion(
 ) -> Result<IngestionReport, CommandError> {
     let chain = parse_chain(chain_id.as_deref());
     let proto = parse_protocol(protocol.as_deref());
+    let mut attempted: Vec<AttemptedSource> = Vec::new();
 
     // Path 1 — subgraph (chain + protocol specific).
     let subgraph: Arc<dyn ArchiveSource> =
         Arc::new(UniswapV3SubgraphSource::for_protocol(chain, proto));
     let ingester = Ingester::new((**storage).clone(), subgraph);
     match ingester.backfill(&pool_address, from_block, to_block).await {
-        Ok(report) => return Ok(report),
+        Ok(mut report) => {
+            report.source_label = Some(format!("subgraph:{}", chain.label()));
+            return Ok(report);
+        }
         Err(e) => {
-            eprintln!("[lp] subgraph backfill ({}) failed → user-rpc: {e}", chain.label());
+            attempted.push(AttemptedSource {
+                source_label: format!("subgraph:{}", chain.label()),
+                error: e.to_string(),
+            });
         }
     }
     // Path 2 — user's Alchemy key, if configured. Only meaningful on
@@ -145,9 +170,16 @@ pub async fn run_lp_ingestion(
             let source: Arc<dyn ArchiveSource> = Arc::new(alchemy.with_payg_unbounded(true));
             let ingester = Ingester::new((**storage).clone(), source);
             match ingester.backfill(&pool_address, from_block, to_block).await {
-                Ok(report) => return Ok(report),
+                Ok(mut report) => {
+                    report.source_label = Some("alchemy:ethereum".to_string());
+                    report.attempted_sources = attempted;
+                    return Ok(report);
+                }
                 Err(e) => {
-                    eprintln!("[lp] alchemy backfill failed → public rpc: {e}");
+                    attempted.push(AttemptedSource {
+                        source_label: "alchemy:ethereum".to_string(),
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -158,10 +190,13 @@ pub async fn run_lp_ingestion(
         AlchemyArchiveSource::with_rpc_url(chain.public_rpc_url()).with_payg_unbounded(true),
     );
     let ingester = Ingester::new((**storage).clone(), public);
-    ingester
+    let mut report = ingester
         .backfill(&pool_address, from_block, to_block)
         .await
-        .map_err(map_ingest_error)
+        .map_err(map_ingest_error)?;
+    report.source_label = Some(format!("public-rpc:{}", chain.label()));
+    report.attempted_sources = attempted;
+    Ok(report)
 }
 
 /// Returns token0/token1 metadata for a pool — addresses, symbols,
@@ -571,14 +606,7 @@ pub async fn lp_token_usd_prices(
         .collect::<Vec<_>>()
         .join(",");
     let url = format!("https://coins.llama.fi/prices/current/{joined}");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| CommandError {
-            message: format!("token prices: client build failed: {e}"),
-            key_required: None,
-        })?;
-    let resp = client
+    let resp = TOKEN_PRICE_CLIENT
         .get(&url)
         .send()
         .await
@@ -622,7 +650,3 @@ struct DefiLlamaPricesResponse {
 struct DefiLlamaPriceEntry {
     price: f64,
 }
-
-// Keep the unused-import lint quiet for the mock-only synthetic helper.
-#[allow(dead_code)]
-fn _link_mock(_: MockHttpFetcher) {}

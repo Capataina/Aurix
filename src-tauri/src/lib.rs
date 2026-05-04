@@ -38,6 +38,30 @@ async fn open_storage() -> Arc<Storage> {
     )
 }
 
+/// Periodic WAL-checkpoint cadence. Bounds the WAL file's growth under
+/// long-running ingest sessions; SQLite's default 1000-page auto-truncate
+/// is a safety net, not a planned cadence. Closes the
+/// `code-health-audit/potential-issues.md` §5 concern.
+const WAL_CHECKPOINT_INTERVAL_SECS: u64 = 60;
+
+fn spawn_wal_checkpoint_task(storage: Arc<Storage>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(
+            WAL_CHECKPOINT_INTERVAL_SECS,
+        ));
+        // Skip the immediate first tick — Storage::open just ran
+        // migrations and the WAL is already at zero pages.
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            // Errors are swallowed here: a failed checkpoint is non-fatal
+            // (next tick retries; SQLite's auto-truncate is the safety
+            // net). Surfacing them as panics would tear down the process.
+            let _ = storage.checkpoint().await;
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -45,6 +69,12 @@ pub fn run() {
         .build()
         .expect("failed to build tokio runtime for storage init");
     let storage = runtime.block_on(open_storage());
+
+    // Schedule the periodic WAL-checkpoint task on the same runtime
+    // before handing the storage handle to Tauri.
+    runtime.block_on(async {
+        spawn_wal_checkpoint_task(storage.clone());
+    });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

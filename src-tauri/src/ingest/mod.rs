@@ -23,7 +23,7 @@ pub mod subgraph;
 pub use alchemy::AlchemyArchiveSource;
 pub use error::IngestError;
 pub use mock::MockArchiveSource;
-pub use pipeline::{IngestionReport, Ingester};
+pub use pipeline::{AttemptedSource, IngestionReport, Ingester};
 pub use source::{ArchiveSource, EthLog};
 pub use subgraph::{PoolMetadata, UniswapV3SubgraphSource};
 
