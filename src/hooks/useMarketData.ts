@@ -4,7 +4,7 @@ import { fetchMarketOverview } from "../features/arbitrage/api";
 import type { MarketOverview, PriceSnapshot } from "../features/arbitrage/types";
 import { HISTORY_LIMIT } from "../lib/config";
 
-export type RefreshIntervalMs = 1000 | 2000 | 5000 | 10_000 | 0;
+export type RefreshIntervalMs = 1000 | 2000 | 5000 | 10_000 | 12_000 | 0;
 
 export interface MarketState {
   /** Most recent market overview (entire venue set + gas). */

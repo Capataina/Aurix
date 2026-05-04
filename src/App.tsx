@@ -41,7 +41,12 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState("arbitrage");
   const [intervalMs, setIntervalMs] = usePersistedState<RefreshIntervalMs>(
     "aurix:refresh-interval",
-    1000,
+    // Default = 12s = one Ethereum block post-Merge. slot0() reads only
+    // change per block; sub-block polling repeats data. Existing users
+    // with a different value persisted keep it (the localStorage merge
+    // only applies to objects, not primitives) — pick a different
+    // option from the topbar dropdown to override.
+    12_000,
   );
   const [pairId, setPairId] = usePersistedState<string>(
     "aurix:pair-id",

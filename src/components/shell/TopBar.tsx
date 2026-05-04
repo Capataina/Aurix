@@ -43,11 +43,17 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   paused: "Paused",
 };
 
+// Ordered slowest → fastest with 12s first as the recommended default
+// (one Ethereum block post-Merge — slot0() reads only change per block,
+// so anything faster repeats data). Sub-block options remain for users
+// who want UX-feedback or tighter gas-price tracking; eth_gasPrice
+// reflects mempool state which can shift faster than block cadence.
 const INTERVAL_OPTIONS: Array<{ value: RefreshIntervalMs; label: string }> = [
-  { value: 1000, label: "1s" },
-  { value: 2000, label: "2s" },
-  { value: 5000, label: "5s" },
+  { value: 12_000, label: "12s" },
   { value: 10_000, label: "10s" },
+  { value: 5000, label: "5s" },
+  { value: 2000, label: "2s" },
+  { value: 1000, label: "1s" },
   { value: 0, label: "Paused" },
 ];
 
